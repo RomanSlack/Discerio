@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 /**
  * LessonCard Component
@@ -8,6 +9,7 @@ import { useState } from 'react';
  */
 export default function LessonCard({ lesson, progress, onProgressUpdate, allLessons }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
 
   // Check if prerequisites are met
   const prerequisitesMet = lesson.prerequisites.every(prereqId => {
@@ -150,6 +152,16 @@ export default function LessonCard({ lesson, progress, onProgressUpdate, allLess
           </button>
           {prerequisitesMet && (
             <div className="flex gap-1">
+              <button
+                onClick={() => router.push('/builder')}
+                className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1"
+                title="Open Agent Builder"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+                Try It
+              </button>
               {progress !== 'completed' && (
                 <button
                   onClick={() => handleProgressChange(progress === 'not-started' ? 'in-progress' : 'completed')}
