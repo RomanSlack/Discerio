@@ -10,6 +10,7 @@ import asyncio
 import os
 from game_client import GameEnvironmentClient
 from openai import OpenAI
+from abc import ABC, abstractmethod
 
 load_dotenv()
 
@@ -24,8 +25,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_STEP_DELAY = float(os.getenv("STEP_DELAY", "6.0"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "5.0"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DAEDALUS_API_KEY = os.getenv("DEDALUS_API_KEY")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "daedalus").lower()
 
-# Initialize OpenAI client
+# Initialize OpenAI client for chat functionality
 openai_client = None
 if OPENAI_API_KEY:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -36,7 +39,163 @@ else:
 MAX_ACTION_HISTORY = 5  # Maximum number of past actions to include in context
 
 
+# ============================================================================
+# LLM Provider Abstraction Layer
+# ============================================================================
+
+class LLMResponse(BaseModel):
+    """Standardized response from LLM providers"""
+    final_output: str
+
+    class Config:
+        extra = "allow"
+
+
+class LLMProvider(ABC):
+    """Abstract base class for LLM providers"""
+
+    @abstractmethod
+    async def run(
+        self,
+        input: str,
+        model: str,
+        mcp_servers: Optional[List[str]] = None,
+        timeout: float = LLM_TIMEOUT
+    ) -> LLMResponse:
+        """Execute LLM inference with given input and return response"""
+        pass
+
+
+class DaedalusProvider(LLMProvider):
+    """Daedalus Labs provider - supports MCP servers and multiple model providers"""
+
+    def __init__(self):
+        if not DAEDALUS_API_KEY:
+            raise ValueError("DEDALUS_API_KEY not found in environment variables")
+        self.client = AsyncDedalus()
+        self.runner = DedalusRunner(self.client)
+        logger.info("✓ Daedalus provider initialized (MCP support enabled)")
+
+    async def run(
+        self,
+        input: str,
+        model: str,
+        mcp_servers: Optional[List[str]] = None,
+        timeout: float = LLM_TIMEOUT
+    ) -> LLMResponse:
+        """Run inference through Daedalus with optional MCP servers"""
+        try:
+            if mcp_servers:
+                logger.info(f"Calling Daedalus with model: {model}, MCP servers: {mcp_servers}")
+                response = await asyncio.wait_for(
+                    self.runner.run(
+                        input=input,
+                        model=model,
+                        mcp_servers=mcp_servers,
+                    ),
+                    timeout=timeout
+                )
+            else:
+                logger.info(f"Calling Daedalus with model: {model}")
+                response = await asyncio.wait_for(
+                    self.runner.run(
+                        input=input,
+                        model=model,
+                    ),
+                    timeout=timeout
+                )
+            return LLMResponse(final_output=response.final_output)
+        except asyncio.TimeoutError:
+            logger.error(f"⏱️ Daedalus LLM timeout after {timeout}s")
+            raise HTTPException(
+                status_code=408,
+                detail=f"LLM request timed out after {timeout} seconds"
+            )
+
+
+class OpenAIProvider(LLMProvider):
+    """Direct OpenAI API provider - faster, simpler, but no MCP support"""
+
+    def __init__(self):
+        if not OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY not found in environment variables")
+        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        logger.info("✓ OpenAI direct API provider initialized (no MCP support)")
+
+    def _normalize_model_name(self, model: str) -> str:
+        """Convert Daedalus-style model names to OpenAI model names"""
+        # Remove provider prefix if present (e.g., "openai/gpt-4o-mini" -> "gpt-4o-mini")
+        if "/" in model:
+            provider, model_name = model.split("/", 1)
+            if provider.lower() != "openai":
+                logger.warning(f"Non-OpenAI model '{model}' requested with OpenAI provider. Using gpt-4o-mini instead.")
+                return "gpt-4o-mini"
+            return model_name
+        return model
+
+    async def run(
+        self,
+        input: str,
+        model: str,
+        mcp_servers: Optional[List[str]] = None,
+        timeout: float = LLM_TIMEOUT
+    ) -> LLMResponse:
+        """Run inference through OpenAI API directly"""
+        if mcp_servers:
+            logger.warning(f"MCP servers {mcp_servers} requested but not supported with OpenAI provider. Ignoring.")
+
+        normalized_model = self._normalize_model_name(model)
+        logger.info(f"Calling OpenAI API with model: {normalized_model}")
+
+        try:
+            # Run in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            response = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: self.client.chat.completions.create(
+                        model=normalized_model,
+                        messages=[
+                            {"role": "user", "content": input}
+                        ],
+                        temperature=0.7,
+                        max_tokens=500
+                    )
+                ),
+                timeout=timeout
+            )
+
+            final_output = response.choices[0].message.content
+            return LLMResponse(final_output=final_output)
+
+        except asyncio.TimeoutError:
+            logger.error(f"⏱️ OpenAI API timeout after {timeout}s")
+            raise HTTPException(
+                status_code=408,
+                detail=f"LLM request timed out after {timeout} seconds"
+            )
+        except Exception as e:
+            logger.error(f"OpenAI API error: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"OpenAI API error: {str(e)}"
+            )
+
+
+def create_llm_provider() -> LLMProvider:
+    """Factory function to create the appropriate LLM provider based on configuration"""
+    if LLM_PROVIDER == "openai":
+        return OpenAIProvider()
+    elif LLM_PROVIDER == "daedalus":
+        return DaedalusProvider()
+    else:
+        logger.warning(f"Unknown LLM_PROVIDER '{LLM_PROVIDER}', defaulting to daedalus")
+        return DaedalusProvider()
+
+
+# ============================================================================
 # Pydantic Models for Block Types
+# ============================================================================
 
 class ToolConnection(BaseModel):
     """Connection from an Agent block to a Tool block"""
@@ -226,9 +385,13 @@ class GameSession:
 
 game_session = GameSession()
 
-# Initialize Dedalus client
-dedalus_client = AsyncDedalus()
-dedalus_runner = DedalusRunner(dedalus_client)
+# Initialize LLM provider based on configuration
+try:
+    llm_provider = create_llm_provider()
+    logger.info(f"🚀 Using LLM provider: {LLM_PROVIDER}")
+except Exception as e:
+    logger.error(f"Failed to initialize LLM provider: {e}")
+    raise
 
 # Initialize game environment client
 game_client = GameEnvironmentClient()
@@ -382,35 +545,18 @@ async def execute_agent_block(
     if has_search_tool:
         mcp_servers.append("tsion/brave-search-mcp")
 
-    # Call Dedalus with MCP server access if MCP tools are available
+    # Call LLM provider with MCP server access if MCP tools are available
     logger.info(f"Calling LLM with model: {agent_block.model} (timeout: {LLM_TIMEOUT}s)")
     if mcp_servers:
         logger.info(f"MCP tools detected, including MCP servers: {mcp_servers}")
 
-    try:
-        if mcp_servers:
-            response = await asyncio.wait_for(
-                dedalus_runner.run(
-                    input=full_input,
-                    model=agent_block.model,
-                    mcp_servers=mcp_servers,
-                ),
-                timeout=LLM_TIMEOUT
-            )
-        else:
-            response = await asyncio.wait_for(
-                dedalus_runner.run(
-                    input=full_input,
-                    model=agent_block.model,
-                ),
-                timeout=LLM_TIMEOUT
-            )
-    except asyncio.TimeoutError:
-        logger.error(f"⏱️ LLM timeout after {LLM_TIMEOUT}s - agent skipped this turn")
-        raise HTTPException(
-            status_code=408,
-            detail=f"LLM request timed out after {LLM_TIMEOUT} seconds"
-        )
+    # Use the configured LLM provider (Daedalus or OpenAI)
+    response = await llm_provider.run(
+        input=full_input,
+        model=agent_block.model,
+        mcp_servers=mcp_servers if mcp_servers else None,
+        timeout=LLM_TIMEOUT
+    )
 
     # Extract the tool name and parameters from the response
     logger.info(f"LLM Raw Output: {response.final_output}")
