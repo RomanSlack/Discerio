@@ -9,6 +9,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "dedalus-labs" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "httpx" },
     { name = "python-dotenv" },
 ]
 
@@ -16,6 +17,7 @@ dependencies = [
 requires-dist = [
     { name = "dedalus-labs", specifier = ">=0.1.0a9" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.121.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
 ]
 

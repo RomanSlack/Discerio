@@ -473,12 +473,67 @@ async def register_agents_in_game():
     }
 
 
+async def process_single_agent_step(
+    agent_id: str,
+    game_states: Dict[str, Any]
+) -> tuple[str, Dict[str, Any]]:
+    """
+    Process a single agent's step. Returns (agent_id, result_dict).
+    This function is designed to be called concurrently for multiple agents.
+    """
+    if agent_id not in game_states:
+        logger.warning(f"No game state for agent {agent_id}, skipping")
+        return agent_id, {"error": "No game state available"}
+
+    if agent_id not in agents:
+        logger.warning(f"Agent {agent_id} not in backend state, skipping")
+        return agent_id, {"error": "Agent not in backend"}
+
+    try:
+        game_state_dict = game_states[agent_id]
+
+        # Create request for existing next-step-for-agents endpoint
+        next_step_request = NextStepRequest(
+            agent_id=agent_id,
+            game_state=GameState(**game_state_dict)
+        )
+
+        # Call existing Dedalus-based next-step logic
+        next_step_response = await next_step_for_agents(next_step_request)
+
+        # If there's an action, send it to the game environment
+        if next_step_response.action:
+            action = next_step_response.action
+            command_result = await game_client.send_command(
+                agent_id,
+                action.tool_type,
+                action.parameters
+            )
+
+            return agent_id, {
+                "action": action.tool_type,
+                "parameters": action.parameters,
+                "next_node": next_step_response.current_node,
+                "game_response": command_result.get("success", False)
+            }
+        else:
+            return agent_id, {
+                "action": None,
+                "reason": "No action from agent",
+                "next_node": next_step_response.current_node
+            }
+
+    except Exception as e:
+        logger.error(f"Error processing agent {agent_id}: {e}")
+        return agent_id, {"error": str(e)}
+
+
 @app.post("/execute-game-step")
 async def execute_game_step():
     """
     Execute one game step for all agents using the existing Dedalus system:
     1. Get game state for each agent from game environment
-    2. Call /next-step-for-agents for each agent (uses Dedalus LLM)
+    2. Call /next-step-for-agents for each agent (uses Dedalus LLM) - ALL SIMULTANEOUSLY
     3. Send actions back to game environment
     """
     if not game_session.active:
@@ -500,56 +555,24 @@ async def execute_game_step():
     game_states = await game_client.batch_get_states(registered_agents)
     logger.info(f"Retrieved game states for {len(game_states)} agents")
 
-    # Step 2 & 3: Use existing next-step-for-agents endpoint for each agent
+    # Step 2 & 3: Process all agents simultaneously using asyncio.gather
+    tasks = [
+        process_single_agent_step(agent_id, game_states)
+        for agent_id in registered_agents
+    ]
+
+    logger.info(f"Processing {len(tasks)} agents simultaneously")
+    results_list = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Collect results into dictionary
     step_results = {}
-    for agent_id in registered_agents:
-        if agent_id not in game_states:
-            logger.warning(f"No game state for agent {agent_id}, skipping")
-            step_results[agent_id] = {"error": "No game state available"}
+    for result in results_list:
+        if isinstance(result, Exception):
+            logger.error(f"Error in agent processing: {result}")
+            # We can't identify which agent failed in this case
             continue
-
-        if agent_id not in agents:
-            logger.warning(f"Agent {agent_id} not in backend state, skipping")
-            step_results[agent_id] = {"error": "Agent not in backend"}
-            continue
-
-        try:
-            game_state_dict = game_states[agent_id]
-
-            # Create request for existing next-step-for-agents endpoint
-            next_step_request = NextStepRequest(
-                agent_id=agent_id,
-                game_state=GameState(**game_state_dict)
-            )
-
-            # Call existing Dedalus-based next-step logic
-            next_step_response = await next_step_for_agents(next_step_request)
-
-            # If there's an action, send it to the game environment
-            if next_step_response.action:
-                action = next_step_response.action
-                command_result = await game_client.send_command(
-                    agent_id,
-                    action.tool_type,
-                    action.parameters
-                )
-
-                step_results[agent_id] = {
-                    "action": action.tool_type,
-                    "parameters": action.parameters,
-                    "next_node": next_step_response.current_node,
-                    "game_response": command_result.get("success", False)
-                }
-            else:
-                step_results[agent_id] = {
-                    "action": None,
-                    "reason": "No action from agent",
-                    "next_node": next_step_response.current_node
-                }
-
-        except Exception as e:
-            logger.error(f"Error processing agent {agent_id}: {e}")
-            step_results[agent_id] = {"error": str(e)}
+        agent_id, agent_result = result
+        step_results[agent_id] = agent_result
 
     game_session.step_count += 1
 
