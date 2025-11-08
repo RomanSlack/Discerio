@@ -169,127 +169,185 @@ function showAgentFlowchart(agentId: string, program: any) {
 // Render flowchart blocks
 function renderFlowchart(container: HTMLElement, blocks: any[]) {
     const flowchartContainer = document.createElement('div');
-    flowchartContainer.style.cssText = 'display: flex; flex-direction: column; gap: 15px;';
+    flowchartContainer.style.cssText = 'position: relative; width: 100%; min-height: 400px;';
 
-    // Group blocks by type
-    const actionBlocks = blocks.filter(b => b.type === 'action');
-    const agentBlocks = blocks.filter(b => b.type === 'agent');
-    const toolBlocks = blocks.filter(b => b.type === 'tool');
+    // Create block map for easy lookup
+    const blockMap = new Map(blocks.map(b => [b.id, b]));
 
-    // Render entry points
-    if (actionBlocks.length > 0) {
-        const section = createSection('Entry Points', '#10b981');
-        actionBlocks.forEach(block => {
-            const blockEl = createBlockElement(block, '#10b981');
-            section.appendChild(blockEl);
-        });
-        flowchartContainer.appendChild(section);
-    }
+    // Position blocks in a flow layout
+    const positions = layoutBlocks(blocks);
 
-    // Render agent blocks
-    if (agentBlocks.length > 0) {
-        const section = createSection('Agent Decisions', '#f59e0b');
-        agentBlocks.forEach(block => {
-            const blockEl = createBlockElement(block, '#f59e0b');
-            section.appendChild(blockEl);
-        });
-        flowchartContainer.appendChild(section);
-    }
+    // Create SVG for connections
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;';
+    flowchartContainer.appendChild(svg);
 
-    // Render tool blocks
-    if (toolBlocks.length > 0) {
-        const section = createSection('Actions', '#3b82f6');
-        toolBlocks.forEach(block => {
-            const blockEl = createBlockElement(block, '#3b82f6');
-            section.appendChild(blockEl);
-        });
-        flowchartContainer.appendChild(section);
-    }
+    // Create arrow marker
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'arrowhead-flow');
+    marker.setAttribute('markerWidth', '10');
+    marker.setAttribute('markerHeight', '10');
+    marker.setAttribute('refX', '9');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    polygon.setAttribute('points', '0 0, 10 3, 0 6');
+    polygon.setAttribute('fill', '#888');
+    marker.appendChild(polygon);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    // Render blocks and connections
+    blocks.forEach(block => {
+        const pos = positions.get(block.id)!;
+        const blockEl = createFlowchartBlock(block, pos);
+        flowchartContainer.appendChild(blockEl);
+
+        // Draw connections
+        if (block.type === 'action' || block.type === 'tool') {
+            if (block.next) {
+                const targetPos = positions.get(block.next);
+                if (targetPos) {
+                    drawConnection(svg, pos, targetPos);
+                }
+            }
+        } else if (block.type === 'agent') {
+            if (block.tool_connections) {
+                block.tool_connections.forEach((conn: any) => {
+                    const targetPos = positions.get(conn.tool_id);
+                    if (targetPos) {
+                        drawConnection(svg, pos, targetPos);
+                    }
+                });
+            }
+        }
+    });
 
     container.appendChild(flowchartContainer);
 }
 
-// Create section header
-function createSection(title: string, color: string): HTMLElement {
-    const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom: 10px;';
+// Layout blocks in a visual flow
+function layoutBlocks(blocks: any[]): Map<string, { x: number, y: number, width: number, height: number }> {
+    const positions = new Map();
+    let currentY = 0;
 
-    const header = document.createElement('h3');
-    header.textContent = title;
-    header.style.cssText = `
-        font-size: 14px;
-        font-weight: bold;
-        color: ${color};
-        margin: 0 0 10px 0;
-        border-bottom: 2px solid ${color};
-        padding-bottom: 5px;
-    `;
-    section.appendChild(header);
+    // Group by type for initial layout
+    const actionBlocks = blocks.filter(b => b.type === 'action');
+    const agentBlocks = blocks.filter(b => b.type === 'agent');
+    const toolBlocks = blocks.filter(b => b.type === 'tool');
 
-    return section;
+    const blockWidth = 140;
+    const blockHeight = 80;
+    const verticalGap = 100;
+    const horizontalGap = 180;
+
+    // Layout action blocks at the top
+    actionBlocks.forEach((block, i) => {
+        positions.set(block.id, {
+            x: i * horizontalGap + 10,
+            y: currentY,
+            width: blockWidth,
+            height: blockHeight
+        });
+    });
+
+    currentY += blockHeight + verticalGap;
+
+    // Layout agent blocks in the middle
+    agentBlocks.forEach((block, i) => {
+        positions.set(block.id, {
+            x: i * horizontalGap + 10,
+            y: currentY,
+            width: blockWidth,
+            height: 100
+        });
+    });
+
+    currentY += 100 + verticalGap;
+
+    // Layout tool blocks at the bottom
+    toolBlocks.forEach((block, i) => {
+        positions.set(block.id, {
+            x: i * horizontalGap + 10,
+            y: currentY,
+            width: blockWidth,
+            height: blockHeight
+        });
+    });
+
+    return positions;
 }
 
-// Create block element
-function createBlockElement(block: any, color: string): HTMLElement {
+// Create flowchart block element
+function createFlowchartBlock(block: any, pos: { x: number, y: number, width: number, height: number }): HTMLElement {
     const blockEl = document.createElement('div');
+
+    let color = '#888';
+    if (block.type === 'action') color = '#10b981';
+    else if (block.type === 'agent') color = '#f59e0b';
+    else if (block.type === 'tool') color = '#3b82f6';
+
     blockEl.style.cssText = `
+        position: absolute;
+        left: ${pos.x}px;
+        top: ${pos.y}px;
+        width: ${pos.width}px;
+        min-height: ${pos.height}px;
         background: ${color};
-        padding: 12px;
-        border-radius: 5px;
-        margin-bottom: 8px;
-        font-size: 13px;
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 11px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        z-index: 10;
     `;
 
-    // Block ID and type
-    const header = document.createElement('div');
-    header.style.cssText = 'font-weight: bold; margin-bottom: 5px;';
-
     if (block.type === 'action') {
-        header.textContent = `${block.action_type}`;
-        if (block.next) {
-            const next = document.createElement('div');
-            next.style.cssText = 'font-size: 11px; opacity: 0.8; margin-top: 3px;';
-            next.textContent = `→ ${block.next}`;
-            blockEl.appendChild(next);
-        }
+        blockEl.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 5px; font-size: 12px;">${block.action_type}</div>
+            <div style="opacity: 0.8; font-size: 10px;">Entry Point</div>
+        `;
     } else if (block.type === 'agent') {
-        header.textContent = `Agent: ${block.id}`;
-        const model = document.createElement('div');
-        model.style.cssText = 'font-size: 11px; opacity: 0.8;';
-        model.textContent = `Model: ${block.model}`;
-        blockEl.appendChild(model);
-
-        const systemPrompt = document.createElement('div');
-        systemPrompt.style.cssText = 'font-size: 11px; margin-top: 5px; font-style: italic;';
-        systemPrompt.textContent = `"${block.system_prompt.substring(0, 60)}${block.system_prompt.length > 60 ? '...' : ''}"`;
-        blockEl.appendChild(systemPrompt);
-
-        if (block.tool_connections && block.tool_connections.length > 0) {
-            const tools = document.createElement('div');
-            tools.style.cssText = 'font-size: 11px; margin-top: 5px;';
-            tools.textContent = `Tools: ${block.tool_connections.map((t: any) => t.tool_name).join(', ')}`;
-            blockEl.appendChild(tools);
-        }
+        const toolNames = block.tool_connections ? block.tool_connections.map((t: any) => t.tool_name).join(', ') : '';
+        blockEl.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 5px; font-size: 12px;">Agent Block</div>
+            <div style="opacity: 0.8; font-size: 10px; margin-bottom: 3px;">${block.model.split('/')[1] || block.model}</div>
+            <div style="opacity: 0.9; font-size: 10px; font-style: italic; margin-top: 5px;">
+                "${block.system_prompt.substring(0, 40)}${block.system_prompt.length > 40 ? '...' : ''}"
+            </div>
+            ${toolNames ? `<div style="opacity: 0.8; font-size: 10px; margin-top: 5px;">→ ${toolNames}</div>` : ''}
+        `;
     } else if (block.type === 'tool') {
-        header.textContent = `${block.tool_type}`;
-        const params = document.createElement('div');
-        params.style.cssText = 'font-size: 11px; opacity: 0.8;';
         const paramKeys = Object.keys(block.parameters);
-        if (paramKeys.length > 0) {
-            params.textContent = `Params: ${paramKeys.join(', ')}`;
-            blockEl.appendChild(params);
-        }
-
-        if (block.next) {
-            const next = document.createElement('div');
-            next.style.cssText = 'font-size: 11px; opacity: 0.8; margin-top: 3px;';
-            next.textContent = `→ ${block.next}`;
-            blockEl.appendChild(next);
-        }
+        blockEl.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 5px; font-size: 12px; text-transform: uppercase;">${block.tool_type}</div>
+            ${paramKeys.length > 0 ? `<div style="opacity: 0.8; font-size: 10px;">Params: ${paramKeys.join(', ')}</div>` : ''}
+            <div style="opacity: 0.8; font-size: 10px; margin-top: 3px;">Action Tool</div>
+        `;
     }
 
-    blockEl.insertBefore(header, blockEl.firstChild);
     return blockEl;
+}
+
+// Draw connection between blocks
+function drawConnection(svg: SVGElement, from: any, to: any) {
+    const fromX = from.x + from.width / 2;
+    const fromY = from.y + from.height;
+    const toX = to.x + to.width / 2;
+    const toY = to.y;
+
+    const midY = (fromY + toY) / 2;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const d = `M ${fromX} ${fromY} L ${fromX} ${midY} L ${toX} ${midY} L ${toX} ${toY}`;
+    path.setAttribute('d', d);
+    path.setAttribute('stroke', '#888');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('marker-end', 'url(#arrowhead-flow)');
+
+    svg.appendChild(path);
 }
 
 async function init() {
