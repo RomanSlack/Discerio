@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suroi Simplified</title>
+    <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+    </div>
+
+    <div id="hud">
+        <div id="health-container">
+            <div id="health-bar">
+                <div id="health-fill"></div>
+            </div>
+            <span id="health-text">100</span>
+        </div>
+
+        <div id="weapon-container">
+            <div id="weapon-name">Pistol</div>
+            <div id="ammo">
+                <span id="ammo-current">15</span> / <span id="ammo-reserve">45</span>
+            </div>
+        </div>
+
+        <div id="kill-feed"></div>
+    </div>
+
+    <div id="menu" class="visible">
+        <div id="menu-content">
+            <h1>SUROI SIMPLIFIED</h1>
+            <input type="text" id="username-input" placeholder="Enter username" maxlength="16" value="Player">
+            <div id="join-buttons">
+                <button id="play-button">PLAY</button>
+                <button id="spectate-button">SPECTATE</button>
+            </div>
+            <div id="controls-info">
+                <h3>Controls</h3>
+                <p>WASD - Move</p>
+                <p>Mouse - Aim</p>
+                <p>Left Click - Shoot</p>
+                <p>1/2 - Switch Weapon</p>
+                <p>F - Pick up items</p>
+                <p>R - Reload</p>
+                <p>TAB - Free Cam Mode</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="death-screen">
+        <div id="death-content">
+            <h1>YOU DIED</h1>
+            <button id="respawn-button">RESPAWN</button>
+        </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
