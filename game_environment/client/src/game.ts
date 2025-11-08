@@ -104,7 +104,7 @@ export class GameClient {
         this.app.ticker.add(() => this.render());
     }
 
-    async connect(username: string, asSpectator: boolean = false): Promise<void> {
+    async connect(username: string, asSpectator: boolean = false, preferredZone?: "zone1" | "zone2"): Promise<void> {
         this.isSpectator = asSpectator;
 
         return new Promise((resolve, reject) => {
@@ -112,7 +112,7 @@ export class GameClient {
             const clientConfig = getClientConfig();
             const wsURL = getWebSocketURL(clientConfig);
 
-            console.log(`[Client] Connecting to ${wsURL} as ${asSpectator ? 'spectator' : 'player'}`);
+            console.log(`[Client] Connecting to ${wsURL} as ${asSpectator ? 'spectator' : 'player'}${preferredZone ? ` (Zone: ${preferredZone})` : ''}`);
             this.socket = new WebSocket(wsURL);
 
             this.socket.onopen = () => {
@@ -127,7 +127,8 @@ export class GameClient {
                 } else {
                     this.socket!.send(JSON.stringify({
                         type: PacketType.Join,
-                        playerName: username
+                        playerName: username,
+                        preferredZone: preferredZone
                     }));
                 }
 

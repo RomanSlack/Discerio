@@ -2,8 +2,8 @@ export const GameConstants = {
     // Server
     TPS: 40,
 
-    // Map
-    MAP_WIDTH: 512,
+    // Map (extended to include both zones)
+    MAP_WIDTH: 856,  // Zone 1 (512) + Zone 2 (256) + gap (88)
     MAP_HEIGHT: 512,
 
     // Player

@@ -301,7 +301,7 @@ const server = Bun.serve<ConnectionData>({
                 switch (data.type) {
                     case PacketType.Join: {
                         const joinPacket = data as JoinPacket;
-                        const player = game.addPlayer(ws, joinPacket.playerName);
+                        const player = game.addPlayer(ws, joinPacket.playerName, joinPacket.preferredZone);
                         ws.data.playerId = player.id;
                         ws.data.isSpectator = false;
                         console.log(`[Server] Player '${joinPacket.playerName}' (ID: ${player.id}) joined from ${ws.data.ip}`);

@@ -204,8 +204,8 @@ export class Game {
         }
     }
 
-    addPlayer(socket: ServerWebSocket<{ playerId: number }>, username: string): Player {
-        const spawnPoint = this.getRandomSpawnPoint();
+    addPlayer(socket: ServerWebSocket<{ playerId: number }>, username: string, preferredZone?: "zone1" | "zone2"): Player {
+        const spawnPoint = this.getRandomSpawnPoint(preferredZone);
         const color = this.getUniqueColor();
         const player = new Player(this.nextPlayerId++, socket, username, spawnPoint, color);
 
@@ -216,7 +216,8 @@ export class Game {
         this.players.set(player.id, player);
         this.grid.addObject(player);
 
-        console.log(`[Game] Player ${username} (${player.id}) joined at (${spawnPoint.x}, ${spawnPoint.y}) with color 0x${color.toString(16)}`);
+        const zoneName = preferredZone ? MAP_DATA.zones[preferredZone].name : "Random";
+        console.log(`[Game] Player ${username} (${player.id}) joined in ${zoneName} at (${spawnPoint.x}, ${spawnPoint.y}) with color 0x${color.toString(16)}`);
 
         return player;
     }
@@ -341,14 +342,24 @@ export class Game {
         return randomColor;
     }
 
-    private getRandomSpawnPoint(): Vector {
+    private getRandomSpawnPoint(preferredZone?: "zone1" | "zone2"): Vector {
         if (this.usedSpawnPoints.size >= MAP_DATA.playerSpawns.length) {
             this.usedSpawnPoints.clear();
         }
 
+        // Determine spawn index range based on zone preference
+        let minIndex = 0;
+        let maxIndex = MAP_DATA.playerSpawns.length - 1;
+
+        if (preferredZone && MAP_DATA.zones[preferredZone]) {
+            const zoneInfo = MAP_DATA.zones[preferredZone];
+            minIndex = zoneInfo.spawnRange[0];
+            maxIndex = zoneInfo.spawnRange[1];
+        }
+
         let attempts = 0;
         while (attempts < 100) {
-            const index = Math.floor(Math.random() * MAP_DATA.playerSpawns.length);
+            const index = Math.floor(Math.random() * (maxIndex - minIndex + 1)) + minIndex;
             if (!this.usedSpawnPoints.has(index)) {
                 const spawn = MAP_DATA.playerSpawns[index];
                 const spawnPos = Vec(spawn.x, spawn.y);

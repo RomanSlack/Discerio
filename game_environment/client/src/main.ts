@@ -439,6 +439,23 @@ async function init() {
     const usernameInput = document.getElementById('username-input')! as HTMLInputElement;
     const respawnButton = document.getElementById('respawn-button')!;
 
+    // Zone selection handling
+    const zone1Button = document.getElementById('zone1-button')!;
+    const zone2Button = document.getElementById('zone2-button')!;
+    let selectedZone: "zone1" | "zone2" = "zone1";
+
+    zone1Button.addEventListener('click', () => {
+        selectedZone = "zone1";
+        zone1Button.classList.add('selected');
+        zone2Button.classList.remove('selected');
+    });
+
+    zone2Button.addEventListener('click', () => {
+        selectedZone = "zone2";
+        zone2Button.classList.add('selected');
+        zone1Button.classList.remove('selected');
+    });
+
     playButton.addEventListener('click', async () => {
         if (connected) return;
 
@@ -448,7 +465,7 @@ async function init() {
         spectateButton.disabled = true;
 
         try {
-            await gameClient.connect(username, false); // Not a spectator
+            await gameClient.connect(username, false, selectedZone); // Pass selected zone
 
             // Start backend agent system
             await startBackendAgents();

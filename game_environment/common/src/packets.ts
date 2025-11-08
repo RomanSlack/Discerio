@@ -11,6 +11,7 @@ export enum PacketType {
 export interface JoinPacket {
     type: PacketType.Join;
     playerName: string;
+    preferredZone?: "zone1" | "zone2"; // Optional zone preference
 }
 
 export interface SpectatorJoinPacket {

@@ -1,23 +1,19 @@
 import { π } from "../../../common/src/utils/math";
 
-export const MAP_DATA = {
-    width: 512,
-    height: 512,
-
+// Zone 1: Main Arena (original map at 0-512, 0-512)
+const ZONE_1_DATA = {
     obstacles: [
         // Dummy obstacle at start (workaround for first-obstacle hitbox bug)
         { type: "tree", x: -100, y: -200, rotation: 0 },
 
         // Border walls - form a clean box around the 512x512 map
-        // Each wall type has the correct hitbox dimensions built-in, no rotation needed!
-
-        // Top wall (horizontal) - 512 wide × 8 tall, positioned to match bottom wall symmetry
+        // Top wall (horizontal) - 512 wide × 8 tall
         { type: "wall_horizontal", x: 256, y: 4, rotation: 0, scale: 1 },
-        // Bottom wall (horizontal) - 512 wide × 8 tall, at y=508
+        // Bottom wall (horizontal)
         { type: "wall_horizontal", x: 256, y: 508, rotation: 0, scale: 1 },
-        // Left wall (vertical) - 8 wide × 512 tall, at x=4
+        // Left wall (vertical)
         { type: "wall_vertical", x: 4, y: 256, rotation: 0, scale: 1 },
-        // Right wall (vertical) - 8 wide × 512 tall, at x=508
+        // Right wall (vertical)
         { type: "wall_vertical", x: 508, y: 256, rotation: 0, scale: 1 },
 
         // Tree border around the walls (creates forest edge effect)
@@ -35,7 +31,7 @@ export const MAP_DATA = {
         { type: "tree", x: 430, y: -20, rotation: 0, scale: 1.0 },
         { type: "tree", x: 470, y: -22, rotation: 0, scale: 1.1 },
 
-        // Bottom border trees (outside the bottom wall at y=508)
+        // Bottom border trees
         { type: "tree", x: 30, y: 532, rotation: 0, scale: 0.9 },
         { type: "tree", x: 70, y: 534, rotation: 0, scale: 1.1 },
         { type: "tree", x: 110, y: 536, rotation: 0, scale: 0.95 },
@@ -49,7 +45,7 @@ export const MAP_DATA = {
         { type: "tree", x: 430, y: 532, rotation: 0, scale: 1.0 },
         { type: "tree", x: 470, y: 534, rotation: 0, scale: 1.1 },
 
-        // Left border trees (outside the left wall at x=4)
+        // Left border trees
         { type: "tree", x: -20, y: 30, rotation: 0, scale: 0.9 },
         { type: "tree", x: -22, y: 70, rotation: 0, scale: 1.1 },
         { type: "tree", x: -24, y: 110, rotation: 0, scale: 0.95 },
@@ -63,7 +59,7 @@ export const MAP_DATA = {
         { type: "tree", x: -20, y: 430, rotation: 0, scale: 1.0 },
         { type: "tree", x: -22, y: 470, rotation: 0, scale: 1.1 },
 
-        // Right border trees (outside the right wall at x=508)
+        // Right border trees
         { type: "tree", x: 532, y: 30, rotation: 0, scale: 0.9 },
         { type: "tree", x: 534, y: 70, rotation: 0, scale: 1.1 },
         { type: "tree", x: 536, y: 110, rotation: 0, scale: 0.95 },
@@ -109,10 +105,6 @@ export const MAP_DATA = {
         { type: "crate", x: 350, y: 180, rotation: π / 6 },
         { type: "crate", x: 140, y: 160, rotation: π / 3 },
         { type: "crate", x: 400, y: 350, rotation: π / 2 },
-
-        // Dummy obstacle (workaround for last-obstacle hitbox bug)
-        // This ensures the last crate above gets proper collision
-        { type: "tree", x: -100, y: -100, rotation: 0 }
     ],
 
     loot: [
@@ -150,4 +142,89 @@ export const MAP_DATA = {
         { x: 180, y: 332 },
         { x: 332, y: 180 }
     ]
+};
+
+// Zone 2: Forest Clearing (smaller zone at 600-856, 0-256)
+// Positioned to the right of Zone 1, smaller area (256x256)
+const ZONE_2_OFFSET_X = 600;
+const ZONE_2_OFFSET_Y = 0;
+
+const ZONE_2_DATA = {
+    obstacles: [
+        // Border walls for Zone 2 (256x256 area)
+        // Top wall
+        { type: "wall_horizontal", x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 4, rotation: 0, scale: 0.5 },
+        // Bottom wall
+        { type: "wall_horizontal", x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 252, rotation: 0, scale: 0.5 },
+        // Left wall
+        { type: "wall_vertical", x: ZONE_2_OFFSET_X + 4, y: ZONE_2_OFFSET_Y + 128, rotation: 0, scale: 0.5 },
+        // Right wall
+        { type: "wall_vertical", x: ZONE_2_OFFSET_X + 252, y: ZONE_2_OFFSET_Y + 128, rotation: 0, scale: 0.5 },
+
+        // 3 trees near perimeter
+        { type: "tree", x: ZONE_2_OFFSET_X + 30, y: ZONE_2_OFFSET_Y + 30, rotation: 0, scale: 1.0 },   // Top-left corner
+        { type: "tree", x: ZONE_2_OFFSET_X + 226, y: ZONE_2_OFFSET_Y + 30, rotation: 0, scale: 1.0 },  // Top-right corner
+        { type: "tree", x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 226, rotation: 0, scale: 1.0 }, // Bottom-center
+
+        // 5 rocks near perimeter
+        { type: "rock", x: ZONE_2_OFFSET_X + 30, y: ZONE_2_OFFSET_Y + 128, rotation: 0, scale: 0.9 },  // Left-center
+        { type: "rock", x: ZONE_2_OFFSET_X + 226, y: ZONE_2_OFFSET_Y + 128, rotation: 0, scale: 0.9 }, // Right-center
+        { type: "rock", x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 30, rotation: 0, scale: 0.9 },  // Top-center
+        { type: "rock", x: ZONE_2_OFFSET_X + 60, y: ZONE_2_OFFSET_Y + 226, rotation: 0, scale: 0.85 }, // Bottom-left
+        { type: "rock", x: ZONE_2_OFFSET_X + 196, y: ZONE_2_OFFSET_Y + 226, rotation: 0, scale: 0.85 }, // Bottom-right
+    ],
+
+    loot: [
+        // NO LOOT IN ZONE 2
+    ],
+
+    playerSpawns: [
+        { x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 128 }, // Center
+        { x: ZONE_2_OFFSET_X + 60, y: ZONE_2_OFFSET_Y + 60 },   // Top-left
+        { x: ZONE_2_OFFSET_X + 196, y: ZONE_2_OFFSET_Y + 60 },  // Top-right
+        { x: ZONE_2_OFFSET_X + 60, y: ZONE_2_OFFSET_Y + 196 },  // Bottom-left
+        { x: ZONE_2_OFFSET_X + 196, y: ZONE_2_OFFSET_Y + 196 }, // Bottom-right
+        { x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 60 },  // Top-center
+        { x: ZONE_2_OFFSET_X + 128, y: ZONE_2_OFFSET_Y + 196 }, // Bottom-center
+        { x: ZONE_2_OFFSET_X + 60, y: ZONE_2_OFFSET_Y + 128 },  // Left-center
+        { x: ZONE_2_OFFSET_X + 196, y: ZONE_2_OFFSET_Y + 128 }, // Right-center
+    ]
+};
+
+// Combined map data (both zones in same world)
+export const MAP_DATA = {
+    width: 856,  // Extended to fit both zones (512 + gap + 256 = 856)
+    height: 512, // Keep max height
+
+    obstacles: [
+        ...ZONE_1_DATA.obstacles,
+        ...ZONE_2_DATA.obstacles,
+        // Dummy obstacle (workaround for last-obstacle hitbox bug)
+        { type: "tree", x: -100, y: -100, rotation: 0 }
+    ],
+
+    loot: [
+        ...ZONE_1_DATA.loot,
+        ...ZONE_2_DATA.loot
+    ],
+
+    playerSpawns: [
+        ...ZONE_1_DATA.playerSpawns,
+        ...ZONE_2_DATA.playerSpawns
+    ],
+
+    // Zone metadata for spawn selection
+    zones: {
+        zone1: {
+            name: "Main Arena",
+            spawnRange: [0, ZONE_1_DATA.playerSpawns.length - 1]
+        },
+        zone2: {
+            name: "Forest Clearing",
+            spawnRange: [
+                ZONE_1_DATA.playerSpawns.length,
+                ZONE_1_DATA.playerSpawns.length + ZONE_2_DATA.playerSpawns.length - 1
+            ]
+        }
+    }
 };
