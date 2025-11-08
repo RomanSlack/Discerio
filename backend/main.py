@@ -701,6 +701,27 @@ async def get_game_session_status():
     }
 
 
+@app.get("/agents-state")
+async def get_agents_state():
+    """
+    Get current execution state for all agents.
+    Returns the current node being executed for each agent.
+    """
+    agent_states = {}
+    for agent_id, agent_state in agents.items():
+        agent_states[agent_id] = {
+            "agent_id": agent_id,
+            "current_node": agent_state.current_node,
+        }
+
+    return {
+        "success": True,
+        "agents": agent_states,
+        "session_active": game_session.active,
+        "step_count": game_session.step_count
+    }
+
+
 async def auto_step_loop():
     """Background task for automatic stepping"""
     logger.info("Auto-stepping started")

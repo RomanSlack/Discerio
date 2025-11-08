@@ -9,6 +9,11 @@ const BACKEND_URL = 'http://localhost:8001';
 // Store agent programs for visualization
 let agentPrograms: Record<string, any> = {};
 
+// Track current nodes for highlighting
+let currentNodes: Record<string, string | null> = {};
+let pollingInterval: number | null = null;
+let currentlyViewingAgent: string | null = null;
+
 // Call backend to register agents and start auto-stepping
 async function startBackendAgents() {
     try {
@@ -48,6 +53,65 @@ async function startBackendAgents() {
     } catch (error) {
         console.warn('Backend agent system not available:', error);
     }
+}
+
+// Start polling for agent states
+function startStatePolling() {
+    if (pollingInterval) return; // Already polling
+
+    pollingInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/agents-state`);
+            if (response.ok) {
+                const data = await response.json();
+                updateCurrentNodes(data.agents);
+            }
+        } catch (error) {
+            console.warn('Failed to fetch agent states:', error);
+        }
+    }, 1000); // Poll every second
+
+    console.log('Started polling for agent states');
+}
+
+// Stop polling
+function stopStatePolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('Stopped polling for agent states');
+    }
+}
+
+// Update node highlighting based on current states
+function updateCurrentNodes(agents: Record<string, any>) {
+    Object.entries(agents).forEach(([agentId, state]) => {
+        // Only update if we're currently viewing this agent's flowchart
+        if (currentlyViewingAgent !== agentId) return;
+
+        const oldNode = currentNodes[agentId];
+        const newNode = state.current_node;
+
+        if (oldNode !== newNode) {
+            // Remove highlight from old node
+            if (oldNode) {
+                const oldBlock = document.querySelector(`[data-block-id="${oldNode}"]`);
+                if (oldBlock) {
+                    oldBlock.classList.remove('active-node');
+                }
+            }
+
+            // Add highlight to new node
+            if (newNode) {
+                const newBlock = document.querySelector(`[data-block-id="${newNode}"]`);
+                if (newBlock) {
+                    newBlock.classList.add('active-node');
+                }
+            }
+
+            currentNodes[agentId] = newNode;
+        }
+    });
 }
 
 // Create buttons for each agent
@@ -113,7 +177,16 @@ function showAgentFlowchart(agentId: string, program: any) {
     let existingFlowchart = document.getElementById('flowchart-viewer');
     if (existingFlowchart) {
         existingFlowchart.remove();
+        currentlyViewingAgent = null;
         return; // Toggle off
+    }
+
+    // Set currently viewing agent
+    currentlyViewingAgent = agentId;
+
+    // Start polling if not already started
+    if (!pollingInterval) {
+        startStatePolling();
     }
 
     // Create flowchart viewer
@@ -151,7 +224,10 @@ function showAgentFlowchart(agentId: string, program: any) {
         font-size: 18px;
         font-weight: bold;
     `;
-    closeBtn.addEventListener('click', () => viewer.remove());
+    closeBtn.addEventListener('click', () => {
+        viewer.remove();
+        currentlyViewingAgent = null;
+    });
     viewer.appendChild(closeBtn);
 
     // Add title
@@ -283,6 +359,9 @@ function layoutBlocks(blocks: any[]): Map<string, { x: number, y: number, width:
 function createFlowchartBlock(block: any, pos: { x: number, y: number, width: number, height: number }): HTMLElement {
     const blockEl = document.createElement('div');
 
+    // Add data attribute for easy selection during highlighting
+    blockEl.setAttribute('data-block-id', block.id);
+
     let color = '#888';
     if (block.type === 'action') color = '#10b981';
     else if (block.type === 'agent') color = '#f59e0b';
@@ -301,6 +380,7 @@ function createFlowchartBlock(block: any, pos: { x: number, y: number, width: nu
         font-size: 11px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         z-index: 10;
+        transition: all 0.3s ease;
     `;
 
     if (block.type === 'action') {

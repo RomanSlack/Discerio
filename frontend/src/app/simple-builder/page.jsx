@@ -10,8 +10,8 @@ const MODELS = [
   { value: 'openai/gpt-4o', label: 'GPT-4o' },
   { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
   { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini' },
-  { value: 'anthropic/claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-  { value: 'anthropic/claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
+  { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+  { value: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku' },
 ];
 
 // Block type definitions matching backend expectations
