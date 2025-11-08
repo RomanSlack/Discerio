@@ -865,7 +865,7 @@ export default function AgentGameBuilder() {
                   onClick={(e) => handleBlockClick(e, block.id)}
                   onContextMenu={(e) => handleBlockRightClick(e, block.id)}
                   onDoubleClick={(e) => handleBlockDoubleClick(e, block.id)}
-                  className={`absolute rounded-lg shadow-lg text-white text-sm font-medium cursor-move select-none hover:shadow-xl transition-all ${isExecuting ? 'active-executing-node' : ''}`}
+                  className={`absolute rounded-lg shadow-lg text-white text-sm font-medium cursor-move select-none hover:shadow-xl ${isExecuting ? 'active-executing-node' : ''}`}
                   style={{
                     left: block.x * zoom + panOffset.x,
                     top: block.y * zoom + panOffset.y,
