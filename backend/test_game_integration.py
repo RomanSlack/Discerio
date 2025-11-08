@@ -29,13 +29,12 @@ def add_agent(agent_id, username):
             {
                 "id": "decide_action",
                 "type": "agent",
-                "model": "openai/gpt-5",
+                "model": "openai/gpt-4.1-mini",
                 "system_prompt": "You are a battle royale AI agent. Make smart tactical decisions.",
-                "user_prompt": "Analyze the game state and choose your best next action. Consider nearby enemies, loot, and your current health.",
+                "user_prompt": "Analyze the game state and choose your best next action. Consider nearby enemies, loot, and your current health. Do not try to move outside the coordinates of the map; your move tool takes in *relative* coordinates",
                 "tool_connections": [
                     {"tool_id": "move_tool", "tool_name": "move"},
                     {"tool_id": "attack_tool", "tool_name": "attack"},
-                    {"tool_id": "collect_tool", "tool_name": "collect"}
                 ]
             },
             {
@@ -159,15 +158,15 @@ def main():
         get_status()
 
         # Step 4: Execute manual steps
-        print_section("Step 4: Executing Manual Steps")
-        for i in range(5):
-            print(f"\n--- Step {i+1} ---")
-            execute_step()
-            time.sleep(2)  # Wait for game to process
+        # print_section("Step 4: Executing Manual Steps")
+        # for i in range(5):
+        #     print(f"\n--- Step {i+1} ---")
+        #     execute_step()
+        #     time.sleep(2)  # Wait for game to process
 
         # Step 5: Check status again
-        print_section("Step 5: Status After Steps")
-        get_status()
+        # print_section("Step 5: Status After Steps")
+        # get_status()
 
         # Step 6: Test auto-stepping
         print_section("Step 6: Testing Auto-Stepping")
@@ -177,7 +176,7 @@ def main():
         print("✓ Auto-stepping started")
 
         # Let it run for a bit
-        time.sleep(5)
+        time.sleep(60)
 
         print("\nStopping auto-stepping...")
         response = requests.post(f"{BACKEND_URL}/stop-auto-stepping")
