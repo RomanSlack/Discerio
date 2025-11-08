@@ -388,58 +388,31 @@ function EducationalScratchApp() {
         <HintSystem nodes={nodes} lastAction={lastAction} />
       </div>
 
-      {/* Right Panel - Enhanced Sandbox & Debug Trail */}
+      {/* Right Panel - Game Environment & Debug Trail */}
       <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
-        {/* Sandbox Viewport with Obstacles */}
-        <div className="h-1/2 border-b border-gray-200 p-4">
+        {/* Game Environment Iframe */}
+        <div className="border-b border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-gray-700">Agent Sandbox</h3>
-            {currentChallenge && (
-              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
-                {currentChallenge.title}
-              </span>
-            )}
+            <h3 className="text-sm font-bold text-gray-700">Live Game Environment</h3>
+            <a
+              href="http://localhost:3000"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
+              title="Open game in new tab"
+            >
+              Open Full Screen ↗
+            </a>
           </div>
-          <div className="relative w-full h-full bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border-2 border-gray-300 overflow-hidden">
-            {/* Agent representation */}
-            <div
-              className="absolute w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold transition-all duration-500 shadow-lg z-10"
-              style={{
-                left: `${agentPos.x}%`,
-                top: `${agentPos.y}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-              title="Your AI Agent"
-            >
-              AI
-            </div>
-
-            {/* Obstacles */}
-            {obstacles.map((obs, idx) => (
-              <div
-                key={idx}
-                className="absolute bg-red-400 opacity-70 rounded"
-                style={{
-                  left: `${obs.x}%`,
-                  top: `${obs.y}%`,
-                  width: `${obs.width}%`,
-                  height: `${obs.height}%`
-                }}
-                title="Obstacle"
-              />
-            ))}
-
-            {/* Goal marker */}
-            <div
-              className="absolute w-8 h-8 bg-green-500 rounded-full animate-pulse flex items-center justify-center text-white font-bold"
-              style={{
-                left: `${goalPos.x}%`,
-                top: `${goalPos.y}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-              title="Goal"
-            >
-              🎯
+          <div className="relative w-full aspect-square bg-gray-900 rounded-lg border-2 border-gray-300 overflow-hidden shadow-lg">
+            <iframe
+              src="http://localhost:3000"
+              className="w-full h-full border-0"
+              title="Game Environment"
+              allow="fullscreen"
+            />
+            <div className="absolute bottom-2 right-2 text-xs text-white bg-black bg-opacity-50 px-2 py-1 rounded pointer-events-none">
+              Port 3000
             </div>
           </div>
         </div>
