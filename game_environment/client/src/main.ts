@@ -38,7 +38,8 @@ async function startBackendAgents() {
         }
 
         console.log('Starting auto-stepping...');
-        const autoStepResponse = await fetch(`${BACKEND_URL}/start-auto-stepping?step_delay=30.0`, {
+        // No step_delay parameter - use backend .env default (STEP_DELAY)
+        const autoStepResponse = await fetch(`${BACKEND_URL}/start-auto-stepping`, {
             method: 'POST',
         });
 
