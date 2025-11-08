@@ -107,7 +107,9 @@ export default function AgentGameBuilder() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, connectionId }
   const canvasRef = useRef(null);
+  const blockRefs = useRef({}); // Store refs to measure actual block dimensions
 
   const blockIdCounter = useRef(0);
 
@@ -436,6 +438,23 @@ export default function AgentGameBuilder() {
     setConnections(connections.filter(c => c.id !== connId));
   };
 
+  // Handle right-click on connection dot to show context menu
+  const handleConnectionRightClick = (e, connId, midX, midY) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: midX,
+      y: midY,
+      connectionId: connId,
+    });
+  };
+
+  // Delete connection from context menu
+  const handleDeleteConnection = (connId) => {
+    setConnections(connections.filter(c => c.id !== connId));
+    setContextMenu(null);
+  };
+
   // Delete block
   const handleBlockDelete = (blockId) => {
     setBlocks(blocks.filter(b => b.id !== blockId));
@@ -470,14 +489,115 @@ export default function AgentGameBuilder() {
     setConfigModalBlock(null);
   };
 
-  // Get block center position (accounting for pan offset and zoom)
-  const getBlockCenter = (blockId) => {
+  // Get actual block dimensions from DOM element
+  const getBlockDimensions = (blockId) => {
+    const blockElement = blockRefs.current[blockId];
+    if (blockElement) {
+      const rect = blockElement.getBoundingClientRect();
+      // Return actual rendered dimensions (already includes zoom via transform)
+      return {
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+    // Fallback to estimated dimensions (accounting for zoom)
+    return { width: 140 * zoom, height: 50 * zoom };
+  };
+
+  // Get block connection point on edge (closest to target) and return edge info
+  const getBlockConnectionPoint = (blockId, targetBlockId) => {
     const block = blocks.find(b => b.id === blockId);
-    if (!block) return { x: 0, y: 0 };
-    return { 
-      x: (block.x + 60) * zoom + panOffset.x, 
-      y: (block.y + 20) * zoom + panOffset.y 
+    if (!block) return { x: 0, y: 0, edge: null };
+    
+    // Get actual block position and dimensions
+    const blockX = block.x * zoom + panOffset.x;
+    const blockY = block.y * zoom + panOffset.y;
+    const blockDims = getBlockDimensions(blockId);
+    const blockWidth = blockDims.width;
+    const blockHeight = blockDims.height;
+    
+    // Calculate block center
+    const centerX = blockX + blockWidth / 2;
+    const centerY = blockY + blockHeight / 2;
+    
+    // If no target, return center (for preview line)
+    if (!targetBlockId) {
+      return { x: centerX, y: centerY, edge: null };
+    }
+    
+    // Get target block center
+    const targetBlock = blocks.find(b => b.id === targetBlockId);
+    if (!targetBlock) return { x: centerX, y: centerY, edge: null };
+    
+    const targetDims = getBlockDimensions(targetBlockId);
+    const targetX = targetBlock.x * zoom + panOffset.x;
+    const targetY = targetBlock.y * zoom + panOffset.y;
+    const targetWidth = targetDims.width;
+    const targetHeight = targetDims.height;
+    const targetCenterX = targetX + targetWidth / 2;
+    const targetCenterY = targetY + targetHeight / 2;
+    
+    // Calculate 4 edge connection points (on the actual edge, accounting for border and arrowhead)
+    const borderWidth = 2; // 2px border
+    const arrowheadOffset = 8; // Account for arrowhead marker size
+    
+    const topPoint = { x: centerX, y: blockY - arrowheadOffset, edge: 'top' };
+    const bottomPoint = { x: centerX, y: blockY + blockHeight + arrowheadOffset, edge: 'bottom' };
+    const leftPoint = { x: blockX - arrowheadOffset, y: centerY, edge: 'left' };
+    const rightPoint = { x: blockX + blockWidth + arrowheadOffset, y: centerY, edge: 'right' };
+    
+    // Calculate distances to target center
+    const distances = {
+      top: Math.sqrt(Math.pow(topPoint.x - targetCenterX, 2) + Math.pow(topPoint.y - targetCenterY, 2)),
+      bottom: Math.sqrt(Math.pow(bottomPoint.x - targetCenterX, 2) + Math.pow(bottomPoint.y - targetCenterY, 2)),
+      left: Math.sqrt(Math.pow(leftPoint.x - targetCenterX, 2) + Math.pow(leftPoint.y - targetCenterY, 2)),
+      right: Math.sqrt(Math.pow(rightPoint.x - targetCenterX, 2) + Math.pow(rightPoint.y - targetCenterY, 2)),
     };
+    
+    // Find closest edge point
+    const closestEdge = Object.entries(distances).reduce((a, b) => a[1] < b[1] ? a : b)[0];
+    
+    switch (closestEdge) {
+      case 'top': return topPoint;
+      case 'bottom': return bottomPoint;
+      case 'left': return leftPoint;
+      case 'right': return rightPoint;
+      default: return { x: centerX, y: centerY, edge: null };
+    }
+  };
+
+  // Get arrowhead orientation based on edge
+  const getArrowheadOrientation = (edge) => {
+    switch (edge) {
+      case 'top': return 90; // Point down (90 degrees)
+      case 'bottom': return 270; // Point up (270 degrees)
+      case 'left': return 0; // Point right (0 degrees)
+      case 'right': return 180; // Point left (180 degrees)
+      default: return 'auto';
+    }
+  };
+
+  // Extend connection point to account for arrowhead tip
+  const extendToArrowheadTip = (point, edge) => {
+    const tipExtension = 2; // Distance from refX (10) to tip (12)
+    
+    switch (edge) {
+      case 'top': // Arrow points down
+        return { ...point, y: point.y + tipExtension };
+      case 'bottom': // Arrow points up
+        return { ...point, y: point.y - tipExtension };
+      case 'left': // Arrow points right
+        return { ...point, x: point.x + tipExtension };
+      case 'right': // Arrow points left
+        return { ...point, x: point.x - tipExtension };
+      default:
+        return point;
+    }
+  };
+
+  // Get block center position (for backward compatibility with preview line)
+  const getBlockCenter = (blockId) => {
+    return getBlockConnectionPoint(blockId, null);
   };
 
   // Deploy agent to backend
@@ -790,25 +910,54 @@ export default function AgentGameBuilder() {
               backgroundPosition: `${panOffset.x}px ${panOffset.y}px`
             }}
             onMouseDown={handleCanvasMouseDown}
-            onContextMenu={(e) => e.preventDefault()} // Prevent right-click menu when panning
+            onContextMenu={(e) => {
+              // Close context menu if clicking outside
+              if (contextMenu) {
+                setContextMenu(null);
+              }
+              e.preventDefault(); // Prevent right-click menu when panning
+            }}
+            onClick={() => {
+              // Close context menu when clicking on canvas
+              if (contextMenu) {
+                setContextMenu(null);
+              }
+            }}
           >
             {/* SVG for connections */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
               {/* Existing connections */}
               {connections.map(conn => {
-                const from = getBlockCenter(conn.from);
-                const to = getBlockCenter(conn.to);
-                const midX = (from.x + to.x) / 2;
-                const midY = (from.y + to.y) / 2;
+                const from = getBlockConnectionPoint(conn.from, conn.to);
+                const to = getBlockConnectionPoint(conn.to, conn.from);
+                // Extend the endpoint to the arrowhead tip
+                const toExtended = extendToArrowheadTip(to, to.edge);
+                const midX = (from.x + toExtended.x) / 2;
+                const midY = (from.y + toExtended.y) / 2;
+                const arrowOrientation = getArrowheadOrientation(to.edge);
+                const markerId = `arrowhead-${arrowOrientation}`;
+
+                // Determine curve shape based on connection edge
+                // For top/bottom connections, flip curve to be vertical-first
+                const isVerticalConnection = to.edge === 'top' || to.edge === 'bottom';
+                let pathD;
+                
+                if (isVerticalConnection) {
+                  // Vertical-first curve: curve vertically first, then horizontally
+                  pathD = `M ${from.x} ${from.y} Q ${from.x} ${midY} ${midX} ${midY} T ${toExtended.x} ${toExtended.y}`;
+                } else {
+                  // Horizontal-first curve: curve horizontally first, then vertically
+                  pathD = `M ${from.x} ${from.y} Q ${midX} ${from.y} ${midX} ${midY} T ${toExtended.x} ${toExtended.y}`;
+                }
 
                 return (
                   <g key={conn.id}>
                     <path
-                      d={`M ${from.x} ${from.y} Q ${midX} ${from.y} ${midX} ${midY} T ${to.x} ${to.y}`}
+                      d={pathD}
                       stroke="#475569"
                       strokeWidth="3"
                       fill="none"
-                      markerEnd="url(#arrowhead)"
+                      markerEnd={`url(#${markerId})`}
                     />
                     <circle
                       cx={midX}
@@ -817,7 +966,8 @@ export default function AgentGameBuilder() {
                       fill="#ef4444"
                       className="cursor-pointer pointer-events-auto hover:r-12 transition"
                       onClick={() => handleConnectionClick(conn.id)}
-                      title="Click to delete connection"
+                      onContextMenu={(e) => handleConnectionRightClick(e, conn.id, midX, midY)}
+                      title="Right-click to delete connection"
                     />
                   </g>
                 );
@@ -836,17 +986,77 @@ export default function AgentGameBuilder() {
                 />
               )}
 
-              {/* Arrowhead marker */}
-              <defs>
-                <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="10"
-                  refX="9"
-                  refY="3"
-                  orient="auto"
+              {/* Context menu for connection deletion */}
+              {contextMenu && (
+                <foreignObject
+                  x={contextMenu.x - 60}
+                  y={contextMenu.y - 30}
+                  width="120"
+                  height="60"
+                  className="pointer-events-auto"
                 >
-                  <polygon points="0 0, 10 3, 0 6" fill="#475569" />
+                  <div className={`${theme.bg.secondary} ${theme.border.primary} border rounded-lg shadow-lg p-2`}>
+                    <button
+                      onClick={() => handleDeleteConnection(contextMenu.connectionId)}
+                      className={`w-full px-3 py-2 text-sm rounded hover:bg-opacity-80 transition-colors ${
+                        theme.isDark ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-red-500 hover:bg-red-600 text-white'
+                      }`}
+                    >
+                      Delete Connection
+                    </button>
+                  </div>
+                </foreignObject>
+              )}
+
+              {/* Arrowhead markers for different orientations */}
+              <defs>
+                {/* Arrowhead pointing right (0 degrees) - for left edge connections */}
+                <marker
+                  id="arrowhead-0"
+                  markerWidth="12"
+                  markerHeight="12"
+                  refX="10"
+                  refY="6"
+                  orient="0"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <polygon points="0 0, 12 6, 0 12" fill="#475569" />
+                </marker>
+                {/* Arrowhead pointing down (90 degrees) - for top edge connections */}
+                <marker
+                  id="arrowhead-90"
+                  markerWidth="12"
+                  markerHeight="12"
+                  refX="10"
+                  refY="6"
+                  orient="90"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <polygon points="0 0, 12 6, 0 12" fill="#475569" />
+                </marker>
+                {/* Arrowhead pointing left (180 degrees) - for right edge connections */}
+                <marker
+                  id="arrowhead-180"
+                  markerWidth="12"
+                  markerHeight="12"
+                  refX="10"
+                  refY="6"
+                  orient="180"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <polygon points="0 0, 12 6, 0 12" fill="#475569" />
+                </marker>
+                {/* Arrowhead pointing up (270 degrees) - for bottom edge connections */}
+                <marker
+                  id="arrowhead-270"
+                  markerWidth="12"
+                  markerHeight="12"
+                  refX="10"
+                  refY="6"
+                  orient="270"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <polygon points="0 0, 12 6, 0 12" fill="#475569" />
                 </marker>
               </defs>
             </svg>
@@ -863,6 +1073,10 @@ export default function AgentGameBuilder() {
               return (
                 <div
                   key={block.id}
+                  ref={(el) => {
+                    if (el) blockRefs.current[block.id] = el;
+                    else delete blockRefs.current[block.id];
+                  }}
                   onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
                   onClick={(e) => handleBlockClick(e, block.id)}
                   onContextMenu={(e) => handleBlockRightClick(e, block.id)}
