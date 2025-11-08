@@ -851,8 +851,8 @@ export default function AgentGameBuilder() {
 
             {/* Blocks */}
             {blocks.map(block => {
-              // Check if this block is currently executing for any agent
-              const isExecuting = Object.values(currentNodes).includes(block.id);
+              // Check if this block is currently executing for THIS agent (matching agentId)
+              const isExecuting = agentId && currentNodes[agentId] === block.id;
 
               // Colors based on theme - darker yellow for light mode for better contrast
               const highlightColor = theme.isDark ? '#ffff00' : '#d97706'; // Bright yellow for dark, amber-600 for light
