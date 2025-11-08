@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 DEFAULT_STEP_DELAY = float(os.getenv("STEP_DELAY", "6.0"))
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "5.0"))
 
 
 # Pydantic Models for Block Types
@@ -314,20 +315,31 @@ async def execute_agent_block(
     logger.info(f"LLM Input:\n{full_input}")
 
     # Call Dedalus with MCP server access if plan tool is available
-    logger.info(f"Calling LLM with model: {agent_block.model}")
-    if has_plan_tool:
-        logger.info("Plan tool detected, including MCP server access")
-        response = await dedalus_runner.run(
-            input=full_input, # TODO: remove this once we figure out how to pass the system prompt
-            model=agent_block.model,
-            mcp_servers=["raptors65/hack-princeton-mcp"],
-            #system=agent_block.system_prompt # TODO: how do I pass system messages in Dedalus??
-        )
-    else:
-        response = await dedalus_runner.run(
-            input=full_input, # TODO: remove this once we figure out how to pass the system prompt
-            model=agent_block.model,
-            #system=agent_block.system_prompt # TODO: how do I pass system messages in Dedalus??
+    logger.info(f"Calling LLM with model: {agent_block.model} (timeout: {LLM_TIMEOUT}s)")
+    try:
+        if has_plan_tool:
+            logger.info("Plan tool detected, including MCP server access")
+            response = await asyncio.wait_for(
+                dedalus_runner.run(
+                    input=full_input,
+                    model=agent_block.model,
+                    mcp_servers=["raptors65/hack-princeton-mcp"],
+                ),
+                timeout=LLM_TIMEOUT
+            )
+        else:
+            response = await asyncio.wait_for(
+                dedalus_runner.run(
+                    input=full_input,
+                    model=agent_block.model,
+                ),
+                timeout=LLM_TIMEOUT
+            )
+    except asyncio.TimeoutError:
+        logger.error(f"⏱️ LLM timeout after {LLM_TIMEOUT}s - agent skipped this turn")
+        raise HTTPException(
+            status_code=408,
+            detail=f"LLM request timed out after {LLM_TIMEOUT} seconds"
         )
 
     # Extract the tool name and parameters from the response
@@ -577,6 +589,13 @@ async def process_single_agent_step(
                 "next_node": next_step_response.current_node
             }
 
+    except HTTPException as e:
+        if e.status_code == 408:  # Timeout
+            logger.warning(f"⏱️ Agent {agent_id} timed out - skipping turn")
+            return agent_id, {"error": "timeout", "message": "LLM request timed out", "skipped": True}
+        else:
+            logger.error(f"HTTP error processing agent {agent_id}: {e.detail}")
+            return agent_id, {"error": str(e.detail)}
     except Exception as e:
         logger.error(f"Error processing agent {agent_id}: {e}")
         return agent_id, {"error": str(e)}
@@ -604,6 +623,7 @@ async def execute_game_step():
         )
 
     logger.info(f"Executing game step {game_session.step_count + 1} for {len(registered_agents)} agents")
+    step_start_time = asyncio.get_event_loop().time()
 
     # Step 1: Get game states for all agents in parallel
     game_states = await game_client.batch_get_states(registered_agents)
@@ -615,8 +635,11 @@ async def execute_game_step():
         for agent_id in registered_agents
     ]
 
-    logger.info(f"Processing {len(tasks)} agents simultaneously")
+    logger.info(f"Processing {len(tasks)} agents simultaneously (max {LLM_TIMEOUT}s per agent)")
+    llm_start_time = asyncio.get_event_loop().time()
     results_list = await asyncio.gather(*tasks, return_exceptions=True)
+    llm_duration = asyncio.get_event_loop().time() - llm_start_time
+    logger.info(f"✅ All agents processed in {llm_duration:.2f}s")
 
     # Collect results into dictionary
     step_results = {}
@@ -629,11 +652,14 @@ async def execute_game_step():
         step_results[agent_id] = agent_result
 
     game_session.step_count += 1
+    total_step_time = asyncio.get_event_loop().time() - step_start_time
+    logger.info(f"📊 Step {game_session.step_count} complete in {total_step_time:.2f}s total")
 
     return {
         "success": True,
         "step": game_session.step_count,
         "agents_processed": len(step_results),
+        "step_duration": round(total_step_time, 2),
         "results": step_results
     }
 
@@ -766,17 +792,28 @@ async def get_agents_state():
 
 
 async def auto_step_loop():
-    """Background task for automatic stepping"""
-    logger.info("Auto-stepping started")
+    """Background task for automatic stepping with dynamic delays"""
+    logger.info(f"Auto-stepping started (min interval: {game_session.step_delay}s)")
     while game_session.auto_stepping and game_session.active:
+        step_start = asyncio.get_event_loop().time()
+
         try:
-            await execute_game_step()
-            logger.info(f"Auto-step {game_session.step_count} completed")
+            result = await execute_game_step()
+            step_duration = result.get("step_duration", 0)
+            logger.info(f"Auto-step {game_session.step_count} completed in {step_duration}s")
+
+            # Only wait if we completed faster than step_delay
+            remaining_time = game_session.step_delay - step_duration
+            if remaining_time > 0:
+                logger.info(f"⏳ Waiting {remaining_time:.2f}s before next step (min interval)")
+                await asyncio.sleep(remaining_time)
+            else:
+                logger.info(f"🚀 Starting next step immediately (took {step_duration}s)")
+
         except Exception as e:
             logger.error(f"Error in auto-step: {e}")
-            # Continue even if there's an error
-
-        await asyncio.sleep(game_session.step_delay)
+            # Continue even if there's an error, wait full delay on error
+            await asyncio.sleep(game_session.step_delay)
 
     logger.info("Auto-stepping stopped")
 

@@ -135,6 +135,14 @@ export class Player extends GameObject {
             return;
         }
 
+        // Handle melee weapons (fists)
+        if (activeWeapon.definition.isMelee) {
+            console.log(`[Player ${this.username}] Melee attack!`);
+            activeWeapon.shoot(now);
+            this.performMeleeAttack(game, activeWeapon.definition);
+            return;
+        }
+
         console.log(`[Player ${this.username}] Shooting! Ammo: ${activeWeapon.ammo}/${activeWeapon.definition.capacity}`);
         activeWeapon.shoot(now);
 
@@ -155,6 +163,73 @@ export class Player extends GameObject {
             const bulletStart = Vec.add(this.position, Vec.scale(direction, GameConstants.PLAYER_RADIUS + 1));
 
             game.createBullet(bulletStart, direction, activeWeapon.definition, this);
+        }
+    }
+
+    performMeleeAttack(game: Game, weaponDef: any): void {
+        const direction = Vec.fromPolar(this.rotation);
+        const meleeRange = weaponDef.range;
+        const meleeDamage = weaponDef.damage * this.getStatMultiplier();
+
+        // Check for hits on players/agents
+        for (const target of game.players.values()) {
+            if (target === this || target.dead) continue;
+
+            const distance = Vec.distance(this.position, target.position);
+            if (distance <= meleeRange) {
+                // Check if target is in front of attacker
+                const toTarget = Vec.normalize(Vec.sub(target.position, this.position));
+                const dotProduct = Vec.dot(direction, toTarget);
+
+                if (dotProduct > 0.5) { // ~60 degree cone in front
+                    target.damage(meleeDamage, this);
+                    console.log(`[Player ${this.username}] Melee hit ${target.username} for ${meleeDamage} damage`);
+                }
+            }
+        }
+
+        // Check for hits on AI agents
+        for (const target of game.aiAgents.values()) {
+            if (target.dead) continue;
+
+            const distance = Vec.distance(this.position, target.position);
+            if (distance <= meleeRange) {
+                const toTarget = Vec.normalize(Vec.sub(target.position, this.position));
+                const dotProduct = Vec.dot(direction, toTarget);
+
+                if (dotProduct > 0.5) {
+                    target.damage(meleeDamage, this);
+                    console.log(`[Player ${this.username}] Melee hit ${target.username} for ${meleeDamage} damage`);
+                }
+            }
+        }
+
+        // Check for hits on obstacles
+        for (const obstacle of game.obstacles) {
+            if (obstacle.dead || obstacle.definition.indestructible) continue;
+
+            const distance = Vec.distance(this.position, obstacle.position);
+            if (distance <= meleeRange + 2) { // Slightly longer range for obstacles
+                const toObstacle = Vec.normalize(Vec.sub(obstacle.position, this.position));
+                const dotProduct = Vec.dot(direction, toObstacle);
+
+                if (dotProduct > 0.3) { // Wider cone for obstacles
+                    const wasAlive = !obstacle.destroyed;
+                    obstacle.damage(meleeDamage);
+                    console.log(`[Player ${this.username}] Melee hit ${obstacle.definition.idString} for ${meleeDamage} damage`);
+
+                    // Spawn XP orbs if obstacle was destroyed
+                    if (wasAlive && obstacle.destroyed) {
+                        const xpAmount = obstacle.definition.idString === "rock" ? 100 :
+                                       obstacle.definition.idString === "tree" ? 50 :
+                                       obstacle.definition.idString === "crate" ? 30 : 0;
+                        if (xpAmount > 0) {
+                            const orbCount = Math.ceil(xpAmount / 10);
+                            game.spawnXPOrbs(obstacle.position, orbCount, 10);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -256,7 +331,8 @@ export class Player extends GameObject {
             dead: this.dead,
             color: this.color,
             xp: this.xp,
-            level: this.getLevel()
+            level: this.getLevel(),
+            attacking: this.attacking
         };
     }
 }

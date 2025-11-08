@@ -49,6 +49,7 @@ export interface PlayerData {
     color: number;
     xp?: number; // XP for display
     level?: number; // Calculated level
+    attacking?: boolean; // Is player attacking (for animations)
 }
 
 export interface BulletData {

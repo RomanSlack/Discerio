@@ -211,7 +211,8 @@ export class Game {
         const color = this.getUniqueColor();
         const player = new Player(this.nextPlayerId++, socket, username, spawnPoint, color);
 
-        // Give starter pistol
+        // Give fists and starter pistol
+        player.addWeapon("fists");
         player.addWeapon("pistol");
         player.addAmmo("9mm", 45);
 
@@ -245,7 +246,8 @@ export class Game {
         const color = this.getUniqueColor();
         const agent = new AIAgent(this.nextAIAgentId++, agentId, displayName, spawnPoint, color);
 
-        // Give starter pistol
+        // Give fists and starter pistol
+        agent.addWeapon("fists");
         agent.addWeapon("pistol");
         agent.addAmmo("9mm", 45);
 

@@ -139,6 +139,13 @@ export class AIAgent extends GameObject {
             return;
         }
 
+        // Handle melee weapons (fists)
+        if (activeWeapon.definition.isMelee) {
+            activeWeapon.shoot(now);
+            this.performMeleeAttack(game, activeWeapon.definition);
+            return;
+        }
+
         activeWeapon.shoot(now);
 
         // Create bullets
@@ -158,6 +165,69 @@ export class AIAgent extends GameObject {
             const bulletStart = Vec.add(this.position, Vec.scale(direction, GameConstants.PLAYER_RADIUS + 1));
 
             game.createBullet(bulletStart, direction, activeWeapon.definition, this);
+        }
+    }
+
+    performMeleeAttack(game: Game, weaponDef: any): void {
+        const direction = Vec.fromPolar(this.rotation);
+        const meleeRange = weaponDef.range;
+        const meleeDamage = weaponDef.damage * this.getStatMultiplier();
+
+        // Check for hits on players
+        for (const target of game.players.values()) {
+            if (target.dead) continue;
+
+            const distance = Vec.distance(this.position, target.position);
+            if (distance <= meleeRange) {
+                const toTarget = Vec.normalize(Vec.sub(target.position, this.position));
+                const dotProduct = Vec.dot(direction, toTarget);
+
+                if (dotProduct > 0.5) {
+                    target.damage(meleeDamage, this);
+                }
+            }
+        }
+
+        // Check for hits on other AI agents
+        for (const target of game.aiAgents.values()) {
+            if (target === this || target.dead) continue;
+
+            const distance = Vec.distance(this.position, target.position);
+            if (distance <= meleeRange) {
+                const toTarget = Vec.normalize(Vec.sub(target.position, this.position));
+                const dotProduct = Vec.dot(direction, toTarget);
+
+                if (dotProduct > 0.5) {
+                    target.damage(meleeDamage, this);
+                }
+            }
+        }
+
+        // Check for hits on obstacles
+        for (const obstacle of game.obstacles) {
+            if (obstacle.dead || obstacle.definition.indestructible) continue;
+
+            const distance = Vec.distance(this.position, obstacle.position);
+            if (distance <= meleeRange + 2) {
+                const toObstacle = Vec.normalize(Vec.sub(obstacle.position, this.position));
+                const dotProduct = Vec.dot(direction, toObstacle);
+
+                if (dotProduct > 0.3) {
+                    const wasAlive = !obstacle.destroyed;
+                    obstacle.damage(meleeDamage);
+
+                    // Spawn XP orbs if obstacle was destroyed
+                    if (wasAlive && obstacle.destroyed) {
+                        const xpAmount = obstacle.definition.idString === "rock" ? 100 :
+                                       obstacle.definition.idString === "tree" ? 50 :
+                                       obstacle.definition.idString === "crate" ? 30 : 0;
+                        if (xpAmount > 0) {
+                            const orbCount = Math.ceil(xpAmount / 10);
+                            game.spawnXPOrbs(obstacle.position, orbCount, 10);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -289,7 +359,8 @@ export class AIAgent extends GameObject {
             dead: this.dead,
             color: this.color,
             xp: this.xp,
-            level: this.getLevel()
+            level: this.getLevel(),
+            attacking: this.attacking
         };
     }
 }

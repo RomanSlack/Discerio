@@ -10,9 +10,23 @@ export interface GunDefinition {
     speed: number;
     bulletCount: number;
     spread?: number;
+    isMelee?: boolean;
 }
 
 export const Guns: Record<string, GunDefinition> = {
+    fists: {
+        idString: "fists",
+        name: "Fists",
+        ammoType: "none",
+        capacity: 1,
+        reloadTime: 0,
+        fireDelay: 300,
+        damage: 25,
+        range: 6,
+        speed: 0,
+        bulletCount: 1,
+        isMelee: true
+    },
     pistol: {
         idString: "pistol",
         name: "Pistol",

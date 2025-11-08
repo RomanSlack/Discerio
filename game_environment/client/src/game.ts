@@ -16,6 +16,8 @@ interface RenderObject {
     nameText?: PIXI.Text;
     xpText?: PIXI.Text;
     leavesContainer?: PIXI.Container; // Separate container for tree leaves (rendered above players)
+    weaponSprite?: PIXI.Graphics;
+    punchAnimation?: { startTime: number; duration: number };
 }
 
 export class GameClient {
@@ -225,6 +227,14 @@ export class GameClient {
                 renderObj.xpText.text = `${playerData.xp || 0} XP`;
             }
 
+            // Trigger punch animation if attacking with fists
+            if (playerData.attacking && playerData.activeWeapon === 0 && renderObj.weaponSprite) {
+                // activeWeapon 0 is fists (first weapon slot)
+                if (!renderObj.punchAnimation) {
+                    renderObj.punchAnimation = { startTime: Date.now(), duration: 200 };
+                }
+            }
+
             // Update player dead state
             if (playerData.dead) {
                 renderObj.container.alpha = 0.3;
@@ -432,6 +442,27 @@ export class GameClient {
                 obj.xpText.scale.set(this.camera.zoom);
             }
 
+            // Animate punch if active
+            if (obj.punchAnimation && obj.weaponSprite) {
+                const elapsed = Date.now() - obj.punchAnimation.startTime;
+                const progress = Math.min(elapsed / obj.punchAnimation.duration, 1);
+
+                if (progress < 1) {
+                    // Punch forward and back
+                    const punchOffset = Math.sin(progress * Math.PI) * 2; // 0 -> 2 -> 0
+                    obj.weaponSprite.position.x = punchOffset;
+
+                    // Also scale slightly for emphasis
+                    const scale = 1 + Math.sin(progress * Math.PI) * 0.3;
+                    obj.weaponSprite.scale.set(scale, scale);
+                } else {
+                    // Reset animation
+                    obj.weaponSprite.position.x = 0;
+                    obj.weaponSprite.scale.set(1, 1);
+                    obj.punchAnimation = undefined;
+                }
+            }
+
             // Highlight our player
             if (id === this.playerId) {
                 obj.container.alpha = 1;
@@ -571,7 +602,8 @@ export class GameClient {
             position: Vec(playerData.x, playerData.y),
             rotation: playerData.rotation,
             nameText,
-            xpText
+            xpText,
+            weaponSprite
         };
     }
 

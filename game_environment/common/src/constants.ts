@@ -12,7 +12,7 @@ export const GameConstants = {
     PLAYER_MAX_HEALTH: 100,
 
     // Pickup
-    PICKUP_RADIUS: 5,
+    PICKUP_RADIUS: 15,
 
     // Grid
     GRID_CELL_SIZE: 32
