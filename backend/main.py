@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_STEP_DELAY = float(os.getenv("STEP_DELAY", "6.0"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "5.0"))
 
+# Configuration for action history
+MAX_ACTION_HISTORY = 5  # Maximum number of past actions to include in context
+
 
 # Pydantic Models for Block Types
 
@@ -130,6 +133,10 @@ class AgentState(BaseModel):
     current_node: Optional[str] = None
     current_plan: Optional[str] = None
     last_agent_block: Optional[str] = None  # Track the last agent block executed for looping
+    past_actions: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="History of past actions taken by the agent (limited to MAX_ACTION_HISTORY)"
+    )
 
 
 class GameState(BaseModel):
@@ -255,11 +262,12 @@ async def execute_agent_block(
     agent_block: AgentBlock,
     game_state: GameState,
     all_blocks: List[Block],
-    current_plan: Optional[str] = None
-) -> tuple[str, Dict[str, Any]]:
+    current_plan: Optional[str] = None,
+    past_actions: Optional[List[Dict[str, Any]]] = None
+) -> tuple[str, Dict[str, Any], str]:
     """
     Execute an agent block using Dedalus SDK to decide which tool to use.
-    Returns a tuple of (tool_name, parameters).
+    Returns a tuple of (tool_name, parameters, reasoning).
     """
     logger.info(f"Executing agent block: {agent_block.id}")
 
@@ -271,6 +279,27 @@ async def execute_agent_block(
     if current_plan:
         logger.info(f"Current plan: {current_plan}")
         game_state_str += f"\n\nCurrent strategic plan: {current_plan}"
+
+    # Add past actions to context if available
+    past_actions_str = ""
+    if past_actions and len(past_actions) > 0:
+        past_actions_str = "\n\nYour recent action history (most recent last):\n"
+        for i, action_record in enumerate(past_actions[-MAX_ACTION_HISTORY:], 1):
+            action_name = action_record.get('action', 'unknown')
+            params = action_record.get('parameters', {})
+            reasoning = action_record.get('reasoning', '')
+
+            if params:
+                param_str = ", ".join([f"{k}={v}" for k, v in params.items()])
+                action_str = f"{action_name}({param_str})"
+            else:
+                action_str = f"{action_name}()"
+
+            if reasoning:
+                past_actions_str += f"{i}. {action_str} - Reasoning: \"{reasoning}\"\n"
+            else:
+                past_actions_str += f"{i}. {action_str}\n"
+        logger.info(f"Including {len(past_actions)} past actions in context")
 
     # Build a map of tool blocks and their parameter schemas
     tool_blocks_map = {}
@@ -310,7 +339,8 @@ async def execute_agent_block(
     # Construct the input prompt
     user_input = (
         f"{agent_block.user_prompt}\n\n"
-        f"Current game state: {game_state_str}\n\n"
+        f"Current game state: {game_state_str}\n"
+        f"{past_actions_str}\n"
         f"Available actions:\n" + "\n".join(f"- {info}" for info in available_tools_info) + "\n"
         f"{attack_context}\n"
         f"IMPORTANT RULES:\n"
@@ -416,7 +446,7 @@ async def execute_agent_block(
 
     logger.info(f"✅ Selected tool: {tool_choice} with parameters: {parameters}")
 
-    return tool_choice, parameters
+    return tool_choice, parameters, reasoning
 
 
 # Endpoints
@@ -913,11 +943,12 @@ async def next_step_for_agents(request: NextStepRequest) -> NextStepResponse:
     agent_state.last_agent_block = current_block.id
 
     # Execute the agent block using Dedalus
-    tool_choice, parameters = await execute_agent_block(
+    tool_choice, parameters, reasoning = await execute_agent_block(
         current_block,
         request.game_state,
         agent_state.program.blocks,
-        agent_state.current_plan
+        agent_state.current_plan,
+        agent_state.past_actions
     )
 
     # Find the tool block corresponding to the chosen tool
@@ -941,6 +972,20 @@ async def next_step_for_agents(request: NextStepRequest) -> NextStepResponse:
     if tool_choice == "plan" and "plan" in parameters:
         agent_state.current_plan = parameters["plan"]
         logger.info(f"Stored plan for agent {agent_id}: {agent_state.current_plan}")
+
+    # Store this action in the agent's action history
+    action_record = {
+        "action": tool_choice,
+        "parameters": parameters,
+        "reasoning": reasoning
+    }
+    agent_state.past_actions.append(action_record)
+
+    # Keep only the most recent MAX_ACTION_HISTORY actions
+    if len(agent_state.past_actions) > MAX_ACTION_HISTORY:
+        agent_state.past_actions = agent_state.past_actions[-MAX_ACTION_HISTORY:]
+
+    logger.info(f"Stored action in history. Total actions in history: {len(agent_state.past_actions)}")
 
     # Update the agent's current node to the tool block's next node
     agent_state.current_node = chosen_tool_block.next
