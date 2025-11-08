@@ -35,6 +35,12 @@ export class AIAgent extends GameObject {
     moving: boolean = false;
     attacking: boolean = false;
 
+    // Smooth movement properties
+    moveTarget: Vector | null = null; // Target position for smooth movement
+    moveStartTime: number = 0; // When movement started
+    moveStartPos: Vector | null = null; // Position when movement started
+    moveDuration: number = 0; // How long the movement should take
+
     constructor(id: number, agentId: string, username: string, position: Vector, color: number) {
         super(id, position);
 
@@ -363,27 +369,67 @@ export class AIAgent extends GameObject {
 
     /**
      * Directly move the agent by a relative offset (for AI backend commands)
-     * This bypasses the input system for more precise AI control
+     * Uses smooth interpolation instead of instant teleportation
      */
     moveByOffset(offset: Vector, game: Game): boolean {
-        const newPosition = Vec.add(this.position, offset);
+        const targetPosition = Vec.add(this.position, offset);
 
-        // Check collision with obstacles
-        const newHitbox = new CircleHitbox(GameConstants.PLAYER_RADIUS, newPosition);
+        // Check collision with obstacles at target position
+        const newHitbox = new CircleHitbox(GameConstants.PLAYER_RADIUS, targetPosition);
         const nearbyObjects = game.grid.intersectsHitbox(newHitbox);
 
         for (const obj of nearbyObjects) {
             if (obj === this) continue;
+            // Skip collision if it's a passable obstacle (open gate or destroyed)
+            if ('isPassable' in obj && typeof obj.isPassable === 'function' && obj.isPassable()) {
+                continue;
+            }
             if (newHitbox.collidesWith(obj.hitbox)) {
                 return false; // Collision detected, movement failed
             }
         }
 
-        // Update position
-        this.position = newPosition;
-        this.hitbox.position = newPosition;
-        game.grid.updateObject(this);
-        return true; // Movement successful
+        // Start smooth movement to target
+        const distance = Vec.len(offset);
+        const moveSpeed = 0.15; // units per millisecond (150 units/second)
+        const duration = distance / moveSpeed; // Calculate duration based on distance
+
+        this.moveTarget = targetPosition;
+        this.moveStartPos = Vec.clone(this.position);
+        this.moveStartTime = Date.now();
+        this.moveDuration = duration;
+
+        return true; // Movement initiated successfully
+    }
+
+    /**
+     * Update smooth movement interpolation
+     * Called every game tick
+     */
+    updateSmoothMovement(game: Game): void {
+        if (!this.moveTarget || !this.moveStartPos) return;
+
+        const now = Date.now();
+        const elapsed = now - this.moveStartTime;
+        const progress = Math.min(elapsed / this.moveDuration, 1.0);
+
+        if (progress >= 1.0) {
+            // Movement complete - snap to final position
+            this.position = Vec.clone(this.moveTarget);
+            this.hitbox.position = this.position;
+            this.moveTarget = null;
+            this.moveStartPos = null;
+            game.grid.updateObject(this);
+        } else {
+            // Interpolate position using ease-out quad for smooth deceleration
+            const easeProgress = 1 - Math.pow(1 - progress, 2);
+            this.position = Vec.add(
+                this.moveStartPos,
+                Vec.scale(Vec.sub(this.moveTarget, this.moveStartPos), easeProgress)
+            );
+            this.hitbox.position = this.position;
+            game.grid.updateObject(this);
+        }
     }
 
     serialize(): PlayerData {
