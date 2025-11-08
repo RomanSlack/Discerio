@@ -231,13 +231,14 @@ export class Game {
         return spectator;
     }
 
-    addAIAgent(agentId: string, username?: string): AIAgent {
+    addAIAgent(agentId: string, username?: string, preferredZone?: "zone1" | "zone2"): AIAgent {
         // Check if agent already exists
         if (this.aiAgents.has(agentId)) {
             throw new Error(`AI Agent with ID ${agentId} already exists`);
         }
 
-        const spawnPoint = this.getRandomSpawnPoint();
+        // Default to zone1 (Main Arena) if no preference specified
+        const spawnPoint = this.getRandomSpawnPoint(preferredZone ?? "zone1");
         const displayName = username || `AI_${agentId}`;
         const color = this.getUniqueColor();
         const agent = new AIAgent(this.nextAIAgentId++, agentId, displayName, spawnPoint, color);
@@ -249,7 +250,8 @@ export class Game {
         this.aiAgents.set(agentId, agent);
         this.grid.addObject(agent);
 
-        console.log(`[Game] AI Agent ${displayName} (${agentId}) joined at (${spawnPoint.x}, ${spawnPoint.y}) with color 0x${color.toString(16)}`);
+        const zoneName = preferredZone ? MAP_DATA.zones[preferredZone].name : MAP_DATA.zones["zone1"].name;
+        console.log(`[Game] AI Agent ${displayName} (${agentId}) joined in ${zoneName} at (${spawnPoint.x}, ${spawnPoint.y}) with color 0x${color.toString(16)}`);
 
         return agent;
     }

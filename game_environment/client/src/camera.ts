@@ -3,7 +3,13 @@ import { Numeric } from "../../common/src/utils/math";
 
 export class Camera {
     position: Vector = Vec(0, 0);
-    zoom: number = 5; // Increased from 3.5 for closer zoom
+    zoom: number = 5; // Current zoom level
+
+    // Zoom controls
+    private targetZoom: number = 5; // Smooth zoom target
+    private minZoom: number = 2;    // Most zoomed out (wider view)
+    private maxZoom: number = 10;   // Most zoomed in (closer view)
+    private zoomEnabled: boolean = false; // Only enabled for spectators
 
     // Free cam mode
     private freeCamEnabled: boolean = false;
@@ -25,6 +31,9 @@ export class Camera {
             // Normal mode - smooth camera follow player
             this.position = Vec.lerp(this.position, targetPosition, 0.1);
         }
+
+        // Smooth zoom transition
+        this.zoom = Numeric.lerp(this.zoom, this.targetZoom, 0.1);
     }
 
     // Toggle free cam mode
@@ -48,6 +57,22 @@ export class Camera {
     // Check if in free cam mode
     isFreeCamEnabled(): boolean {
         return this.freeCamEnabled;
+    }
+
+    // Enable zoom (for spectators)
+    enableZoom(): void {
+        this.zoomEnabled = true;
+    }
+
+    // Set zoom level (with mouse wheel)
+    adjustZoom(delta: number): void {
+        if (!this.zoomEnabled) return;
+
+        this.targetZoom = Numeric.clamp(
+            this.targetZoom + delta,
+            this.minZoom,
+            this.maxZoom
+        );
     }
 
     worldToScreen(worldPos: Vector): Vector {

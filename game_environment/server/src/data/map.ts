@@ -100,7 +100,7 @@ const ZONE_1_DATA = {
         { type: "rock", x: 380, y: 400, rotation: 0 },
 
         // Crates
-        { type: "crate", x: 256, y: 256, rotation: 0 },
+        { type: "crate", x: 320, y: 380, rotation: 0 }, // Moved from dead center to lower-right area
         { type: "crate", x: 180, y: 300, rotation: π / 4 },
         { type: "crate", x: 350, y: 180, rotation: π / 6 },
         { type: "crate", x: 140, y: 160, rotation: π / 3 },

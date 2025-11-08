@@ -89,6 +89,19 @@ export class InputManager {
         this.canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+
+        // Mouse wheel for zoom (spectators only)
+        this.canvas.addEventListener('wheel', (e) => {
+            e.preventDefault(); // Prevent page scroll
+
+            if (this.camera) {
+                // Normalize wheel delta (different browsers have different values)
+                // Negative delta = scroll up = zoom in
+                // Positive delta = scroll down = zoom out
+                const delta = Math.sign(e.deltaY) * -0.3;
+                this.camera.adjustZoom(delta);
+            }
+        }, { passive: false }); // passive: false allows preventDefault
     }
 
     getInputPacket(camera: Camera): InputPacket {

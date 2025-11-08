@@ -107,6 +107,12 @@ export class GameClient {
     async connect(username: string, asSpectator: boolean = false, preferredZone?: "zone1" | "zone2"): Promise<void> {
         this.isSpectator = asSpectator;
 
+        // Enable zoom for spectators
+        if (asSpectator) {
+            this.camera.enableZoom();
+            console.log('[Client] Spectator zoom enabled (scroll to zoom)');
+        }
+
         return new Promise((resolve, reject) => {
             // Get WebSocket URL from config (auto-detects localhost vs production)
             const clientConfig = getClientConfig();
@@ -717,15 +723,28 @@ export class GameClient {
         // Create a simple grass texture pattern in world space
         this.grassBackground = new PIXI.Graphics();
 
-        // Draw grass texture (512x512 map size in world coords)
         const tileSize = 32;
-        const mapSize = 512;
 
-        for (let x = 0; x < mapSize; x += tileSize) {
-            for (let y = 0; y < mapSize; y += tileSize) {
+        // Zone 1: Main Arena (512x512)
+        const zone1Size = 512;
+        for (let x = 0; x < zone1Size; x += tileSize) {
+            for (let y = 0; y < zone1Size; y += tileSize) {
                 // Alternate grass shades for subtle checkerboard
                 const shade = (x/tileSize + y/tileSize) % 2 === 0 ? 0x7fa84f : 0x6d944a;
                 this.grassBackground.rect(x, y, tileSize, tileSize);
+                this.grassBackground.fill({ color: shade, alpha: 0.15 });
+            }
+        }
+
+        // Zone 2: Forest Clearing (256x256) at offset (600, 0)
+        const zone2OffsetX = 600;
+        const zone2OffsetY = 0;
+        const zone2Size = 256;
+        for (let x = 0; x < zone2Size; x += tileSize) {
+            for (let y = 0; y < zone2Size; y += tileSize) {
+                // Same checkerboard pattern for Zone 2
+                const shade = (x/tileSize + y/tileSize) % 2 === 0 ? 0x7fa84f : 0x6d944a;
+                this.grassBackground.rect(zone2OffsetX + x, zone2OffsetY + y, tileSize, tileSize);
                 this.grassBackground.fill({ color: shade, alpha: 0.15 });
             }
         }

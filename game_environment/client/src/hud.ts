@@ -45,7 +45,7 @@ export class HUD {
     }
 
     showSpectatorMode(): void {
-        this.freeCamIndicator.textContent = '👁️ SPECTATOR MODE - Watching players | Press TAB for free cam';
+        this.freeCamIndicator.textContent = '👁️ SPECTATOR MODE - TAB: Free Cam | SCROLL: Zoom';
         this.freeCamIndicator.style.background = 'rgba(100, 100, 255, 0.9)';
         this.freeCamIndicator.style.border = '2px solid rgba(150, 150, 255, 1)';
         this.freeCamIndicator.style.display = 'block';
