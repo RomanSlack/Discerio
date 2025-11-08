@@ -109,6 +109,9 @@ export default function AgentGameBuilder() {
 
   const blockIdCounter = useRef(0);
 
+  // State for tracking current executing nodes
+  const [currentNodes, setCurrentNodes] = useState({});
+
   // Load from localStorage only on client side after mount
   useEffect(() => {
     setIsClient(true);
@@ -158,6 +161,33 @@ export default function AgentGameBuilder() {
       console.error('Error saving agentId:', error);
     }
   }, [agentId, isClient]);
+
+  // Poll backend for current node states
+  useEffect(() => {
+    if (!isClient) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/agents-state`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.agents) {
+            // Update current nodes for all agents
+            const newCurrentNodes = {};
+            Object.entries(data.agents).forEach(([agentId, state]) => {
+              newCurrentNodes[agentId] = state.current_node;
+            });
+            setCurrentNodes(newCurrentNodes);
+          }
+        }
+      } catch (error) {
+        // Silently fail - backend might not be available
+        console.debug('Failed to fetch agent states:', error);
+      }
+    }, 1000); // Poll every second
+
+    return () => clearInterval(pollInterval);
+  }, [isClient]);
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -820,33 +850,51 @@ export default function AgentGameBuilder() {
             </svg>
 
             {/* Blocks */}
-            {blocks.map(block => (
-              <div
-                key={block.id}
-                onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
-                onClick={(e) => handleBlockClick(e, block.id)}
-                onContextMenu={(e) => handleBlockRightClick(e, block.id)}
-                onDoubleClick={(e) => handleBlockDoubleClick(e, block.id)}
-                className="absolute rounded-lg shadow-lg text-white text-sm font-medium cursor-move select-none hover:shadow-xl transition-shadow"
-                style={{
-                  left: block.x * zoom + panOffset.x,
-                  top: block.y * zoom + panOffset.y,
-                  transform: `scale(${zoom})`,
-                  transformOrigin: '0 0',
-                  backgroundColor: block.color,
-                  padding: '8px 16px',
-                  zIndex: 10,
-                  border: connectingFrom === block.id ? '3px solid yellow' : '2px solid rgba(0,0,0,0.2)',
-                }}
-              >
-                <div>{block.label}</div>
-                {block.blockType === 'agent' && (
-                  <div className="text-xs opacity-75 mt-1">
-                    {block.model.split('/')[1]}
-                  </div>
-                )}
-              </div>
-            ))}
+            {blocks.map(block => {
+              // Check if this block is currently executing for any agent
+              const isExecuting = Object.values(currentNodes).includes(block.id);
+
+              // Colors based on theme - darker yellow for light mode for better contrast
+              const highlightColor = theme.isDark ? '#ffff00' : '#d97706'; // Bright yellow for dark, amber-600 for light
+              const glowColor = theme.isDark ? 'rgba(255, 255, 0, 0.9)' : 'rgba(217, 119, 6, 0.8)';
+
+              return (
+                <div
+                  key={block.id}
+                  onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+                  onClick={(e) => handleBlockClick(e, block.id)}
+                  onContextMenu={(e) => handleBlockRightClick(e, block.id)}
+                  onDoubleClick={(e) => handleBlockDoubleClick(e, block.id)}
+                  className={`absolute rounded-lg shadow-lg text-white text-sm font-medium cursor-move select-none hover:shadow-xl transition-all ${isExecuting ? 'active-executing-node' : ''}`}
+                  style={{
+                    left: block.x * zoom + panOffset.x,
+                    top: block.y * zoom + panOffset.y,
+                    transform: `scale(${zoom})`,
+                    transformOrigin: '0 0',
+                    backgroundColor: block.color,
+                    padding: '8px 16px',
+                    zIndex: isExecuting ? 20 : 10,
+                    border: connectingFrom === block.id ? '3px solid yellow' : isExecuting ? `3px solid ${highlightColor}` : '2px solid rgba(0,0,0,0.2)',
+                    boxShadow: isExecuting ? `0 0 25px 8px ${glowColor}` : undefined,
+                  }}
+                >
+                  {isExecuting && (
+                    <div
+                      className="absolute -left-6 top-1/2 -translate-y-1/2 text-lg animate-pulse"
+                      style={{ color: highlightColor }}
+                    >
+                      ▶
+                    </div>
+                  )}
+                  <div>{block.label}</div>
+                  {block.blockType === 'agent' && (
+                    <div className="text-xs opacity-75 mt-1">
+                      {block.model.split('/')[1]}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {/* Empty state instructions */}
             {blocks.length === 0 && (
