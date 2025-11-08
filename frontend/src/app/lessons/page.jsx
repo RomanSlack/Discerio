@@ -543,10 +543,10 @@ export default function LessonsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1e1e1e] flex flex-row">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex flex-row">
       {/* Main Content - Roadmap */}
       <div className="flex-1 relative">
-        <div className="h-screen bg-gradient-to-br from-[#1e1e1e] via-[#252526] to-[#1e1e1e] overflow-hidden">
+        <div className="h-screen bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
           <NeetCodeRoadmap
             components={COMPONENTS}
             lessons={LESSONS}

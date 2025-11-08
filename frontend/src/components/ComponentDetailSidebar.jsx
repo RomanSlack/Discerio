@@ -9,8 +9,8 @@ import { useState } from 'react';
 export default function ComponentDetailSidebar({ component, lessons, progress, onProgressUpdate, onClose }) {
   if (!component) {
     return (
-      <div className="w-[600px] h-screen bg-[#1e1e1e] text-white overflow-y-auto border-l border-[#3e3e42] flex-shrink-0 flex items-center justify-center">
-        <div className="text-center text-gray-400">
+      <div className="w-[600px] h-screen bg-white overflow-y-auto border-l border-slate-200 flex-shrink-0 flex items-center justify-center">
+        <div className="text-center text-gray-500">
           <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
@@ -61,14 +61,14 @@ export default function ComponentDetailSidebar({ component, lessons, progress, o
   // Removed: prerequisites section per request
 
   return (
-    <div className="w-[600px] h-screen bg-[#1e1e1e] text-white overflow-y-auto border-l border-[#3e3e42] flex-shrink-0 animate-slide-in-right">
+    <div className="w-[600px] h-screen bg-white overflow-y-auto border-l border-slate-200 flex-shrink-0 animate-slide-in-right">
       {/* Header */}
-      <div className="sticky top-0 bg-[#252526] border-b border-[#3e3e42] p-6 z-10">
+      <div className="sticky top-0 bg-white border-b border-slate-200 p-6 z-10">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">{component.name}</h2>
+          <h2 className="text-2xl font-bold text-gray-900">{component.name}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition"
+            className="text-gray-500 hover:text-gray-700 transition"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -79,12 +79,12 @@ export default function ComponentDetailSidebar({ component, lessons, progress, o
         {/* Progress */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-400">Progress</span>
-            <span className="text-sm font-semibold text-white">
+            <span className="text-sm text-gray-600">Progress</span>
+            <span className="text-sm font-semibold text-gray-900">
               {completedCount} / {totalCount}
             </span>
           </div>
-          <div className="w-full bg-[#3e3e42] rounded-full h-3 border border-[#4a4a4f] overflow-hidden">
+          <div className="w-full bg-gray-200 rounded-full h-3 border border-gray-300 overflow-hidden">
             <div
               className={`h-full transition-all duration-500 ease-in-out ${
                 progressPercentage === 100
@@ -102,16 +102,16 @@ export default function ComponentDetailSidebar({ component, lessons, progress, o
       <div className="p-6">
         {/* Lessons Table */}
         <div>
-          <h3 className="text-lg font-semibold mb-3">Lessons</h3>
+          <h3 className="text-lg font-semibold mb-3 text-gray-900">Lessons</h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-[#3e3e42]">
-                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-400">Status</th>
-                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-400">Star</th>
-                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-400">Lesson</th>
-                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-400">Difficulty</th>
-                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-400">Time</th>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-500">Status</th>
+                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-500">Star</th>
+                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-500">Lesson</th>
+                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-500">Difficulty</th>
+                  <th className="text-left py-2 px-3 text-sm font-semibold text-gray-500">Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -122,7 +122,7 @@ export default function ComponentDetailSidebar({ component, lessons, progress, o
                   return (
                     <tr
                       key={lesson.id}
-                      className={`border-b border-[#3e3e42] hover:bg-[#2d2d30] transition-colors ${isCompleted ? 'bg-[#1e3a1e]/30' : ''}`}
+                      className={`border-b border-slate-200 hover:bg-slate-50 transition-colors ${isCompleted ? 'bg-green-50/50' : ''}`}
                     >
                       {/* Status */}
                       <td className="py-3 px-3">
@@ -150,7 +150,7 @@ export default function ComponentDetailSidebar({ component, lessons, progress, o
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2">
                           <div>
-                            <div className="font-medium text-sm">{lesson.title}</div>
+                            <div className="font-medium text-sm text-gray-900">{lesson.title}</div>
                           </div>
                         </div>
                       </td>
@@ -165,7 +165,7 @@ export default function ComponentDetailSidebar({ component, lessons, progress, o
                       </td>
                       
                       {/* Time */}
-                      <td className="py-3 px-3 text-sm text-gray-400">
+                      <td className="py-3 px-3 text-sm text-gray-500">
                         {lesson.estimatedTime}
                       </td>
                     </tr>

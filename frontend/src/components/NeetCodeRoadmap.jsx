@@ -26,7 +26,7 @@ export default function NeetCodeRoadmap({ components, lessons, progress, onCompo
   }, [lessons, progress]);
 
   return (
-    <div className="w-full h-full bg-[#1e1e1e] p-6 overflow-auto flex items-center">
+    <div className="w-full h-full bg-gradient-to-br from-slate-50 to-slate-100 p-6 overflow-auto flex items-center">
       <div className="max-w-7xl mx-auto w-full">
         {organizedComponents.map((row, rowIdx) => (
           <div key={rowIdx} className="flex flex-wrap justify-center gap-8 mb-10">
@@ -36,12 +36,10 @@ export default function NeetCodeRoadmap({ components, lessons, progress, onCompo
                 <button
                   key={component.id}
                   onClick={() => onComponentSelect(component)}
-                  className="bg-white rounded-xl border-2 px-8 py-6 text-gray-900 transition-all hover:scale-105 hover:shadow-2xl flex flex-col items-center justify-center border-gray-300 shadow-lg text-center"
+                  className="bg-white rounded-xl border-2 px-8 py-6 text-gray-900 transition-all hover:scale-105 flex flex-col items-center justify-center border-slate-200 text-center"
                   style={{
                     width: '420px',
                     height: '100px',
-                    boxShadow:
-                      '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2)',
                   }}
                 >
                   <div className="font-bold text-lg text-gray-900 mb-3">
