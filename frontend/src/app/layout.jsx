@@ -3,8 +3,8 @@ import Navigation from '../components/Navigation'
 import { ThemeProvider } from '../contexts/ThemeContext'
 
 export const metadata = {
-  title: 'GPT Agent Builder',
-  description: 'Build and visualize GPT agent logic',
+  title: 'Discer.io - Learn AI Agents Through Play',
+  description: 'Educational MMO sandbox for designing and deploying agentic AI workflows using drag-and-drop programming blocks.',
 }
 
 export default function RootLayout({ children }) {
