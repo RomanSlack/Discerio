@@ -473,7 +473,12 @@ async def health_check():
 
 
 @app.post("/add-agent")
-async def add_agent(program: ProgramSchema, register_in_game: bool = False, username: Optional[str] = None):
+async def add_agent(
+    program: ProgramSchema,
+    register_in_game: bool = False,
+    username: Optional[str] = None,
+    preferred_zone: Optional[str] = None
+):
     """
     Add a new agent to the backend with its Scratch-like program.
 
@@ -483,6 +488,7 @@ async def add_agent(program: ProgramSchema, register_in_game: bool = False, user
         program: Agent program with blocks
         register_in_game: If True, also register the agent in the game environment
         username: Optional display name for the agent in the game
+        preferred_zone: Optional zone preference ("zone1" or "zone2"). Defaults to zone1 if not specified.
     """
     agent_id = program.agent_id
 
@@ -520,9 +526,10 @@ async def add_agent(program: ProgramSchema, register_in_game: bool = False, user
     game_registration = None
     if register_in_game:
         try:
-            game_registration = await game_client.register_agent(agent_id, username)
+            game_registration = await game_client.register_agent(agent_id, username, preferred_zone)
             game_session.registered_agents[agent_id] = True
-            logger.info(f"Agent {agent_id} registered in game environment")
+            zone_info = f" in {preferred_zone}" if preferred_zone else ""
+            logger.info(f"Agent {agent_id} registered in game environment{zone_info}")
         except Exception as e:
             logger.error(f"Failed to register agent in game: {e}")
             # Don't fail the whole request, just log the error
