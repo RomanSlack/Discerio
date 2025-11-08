@@ -757,6 +757,14 @@ async def add_agent(request: AddAgentRequest):
             detail=f"Agent with ID '{agent_id}' already exists"
         )
 
+    # Validate agent ID doesn't conflict with reserved player IDs
+    normalized_id = agent_id.lower()
+    if normalized_id == 'player' or (normalized_id.startswith('player') and normalized_id[6:].isdigit()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Agent ID '{agent_id}' is reserved. Player IDs (Player, Player1, Player2, etc.) cannot be used for AI agents."
+        )
+
     # Find the onStart action block
     on_start_block = None
     for block in request.blocks:

@@ -940,6 +940,9 @@ export default function AgentGameBuilder() {
 
           <div className={`mt-2 text-xs ${theme.text.tertiary} text-center`}>
             <p className="font-semibold">Blocks: {blocks.length} | Connections: {connections.length}</p>
+            <p className="mt-1 text-[10px] italic">
+              Note: Don't use "Player" or "Player#" as agent IDs
+            </p>
           </div>
 
           {/* Manage Agents Button */}

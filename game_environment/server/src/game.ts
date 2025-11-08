@@ -27,7 +27,7 @@ export class Game {
     agentBridge: AgentBridge;
 
     private nextPlayerId = 1;
-    private nextAIAgentId = 1;
+    private nextAIAgentId = 10000; // Start AI agents at 10000 to avoid collision with human players
     private nextSpectatorId = 1;
     private nextObstacleId = 1;
     private nextLootId = 1;
@@ -258,6 +258,19 @@ export class Game {
         // Check if agent already exists
         if (this.aiAgents.has(agentId)) {
             throw new Error(`AI Agent with ID ${agentId} already exists`);
+        }
+
+        // Prevent reserved IDs that could conflict with player usernames
+        const normalizedId = agentId.toLowerCase();
+        if (normalizedId === 'player' || /^player\d+$/.test(normalizedId)) {
+            throw new Error(`Agent ID "${agentId}" is reserved. Player IDs (Player, Player1, Player2, etc.) cannot be used for AI agents.`);
+        }
+
+        // Check if any human player has this username (case-insensitive)
+        for (const player of this.players.values()) {
+            if (player.username.toLowerCase() === normalizedId) {
+                throw new Error(`Agent ID "${agentId}" conflicts with existing player username "${player.username}"`);
+            }
         }
 
         // Default to zone1 (Main Arena) if no preference specified
