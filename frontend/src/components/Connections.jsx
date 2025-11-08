@@ -229,4 +229,3 @@ function Connections({ nodes, connections, onConnectionDelete, tempConnection = 
 }
 
 export default Connections;
-

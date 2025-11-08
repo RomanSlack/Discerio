@@ -163,4 +163,3 @@ function Block({ node, onDrag, onDragEnd, onClick, isSelected = false, isConnect
 }
 
 export default Block;
-
