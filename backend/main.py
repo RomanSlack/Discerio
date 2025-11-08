@@ -11,6 +11,16 @@ import os
 from game_client import GameEnvironmentClient
 from openai import OpenAI
 from abc import ABC, abstractmethod
+import time
+from challenges import (
+    CHALLENGES,
+    Challenge,
+    Objective,
+    ObjectiveType,
+    get_challenge_by_id,
+    get_all_challenges,
+    validate_blocks_for_challenge
+)
 
 load_dotenv()
 
@@ -284,6 +294,7 @@ class AddAgentRequest(BaseModel):
     username: Optional[str] = Field(None, description="Display name for the agent in game")
     preferred_zone: Optional[str] = Field(None, description="Preferred zone (zone1 or zone2)")
     zone2_left_only: bool = Field(False, description="If zone2, spawn only on left side of gate")
+    challenge_id: Optional[str] = Field(None, description="Challenge ID if this agent is for a challenge")
 
     @validator("blocks")
     def validate_blocks(cls, v):
@@ -313,6 +324,7 @@ class AgentState(BaseModel):
         default_factory=list,
         description="History of past actions taken by the agent (limited to MAX_ACTION_HISTORY)"
     )
+    challenge_id: Optional[str] = None  # ID of active challenge if any
 
 
 class GameState(BaseModel):
@@ -384,6 +396,28 @@ app.add_middleware(
 
 # In-memory game state
 agents: Dict[str, AgentState] = {}
+
+
+# ============================================================================
+# Challenge State Tracking
+# ============================================================================
+
+class ChallengeState(BaseModel):
+    """Tracks progress of an agent in a challenge"""
+    challenge_id: str
+    agent_id: str
+    start_time: float
+    objectives_completed: List[str] = Field(default_factory=list)
+    is_completed: bool = False
+    is_failed: bool = False
+    failure_reason: Optional[str] = None
+    elapsed_time: float = 0.0
+    current_position: Optional[Dict[str, float]] = None
+    item_collected: bool = False  # Track if item was collected
+
+
+challenge_states: Dict[str, ChallengeState] = {}  # agent_id -> ChallengeState
+
 
 # Game session state
 class GameSession:
@@ -738,6 +772,193 @@ async def health_check():
     }
 
 
+# ============================================================================
+# Challenge Endpoints
+# ============================================================================
+
+@app.get("/challenges")
+async def get_challenges():
+    """Get all available challenges"""
+    challenges_list = get_all_challenges()
+    return {
+        "challenges": [
+            {
+                "id": c.id,
+                "title": c.title,
+                "description": c.description,
+                "difficulty": c.difficulty,
+                "challenge_type": c.challenge_type,
+                "objectives": [
+                    {"id": o.id, "description": o.description, "required": o.required}
+                    for o in c.objectives
+                ],
+                "block_constraints": c.block_constraints.model_dump(),
+                "time_limit": c.win_condition.time_limit,
+                "prerequisite_challenges": c.prerequisite_challenges,
+                "next_challenge_id": c.next_challenge_id
+            }
+            for c in challenges_list
+        ]
+    }
+
+
+@app.get("/challenges/{challenge_id}")
+async def get_challenge(challenge_id: str):
+    """Get specific challenge details"""
+    challenge = get_challenge_by_id(challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+
+    return {"challenge": challenge.model_dump()}
+
+
+@app.post("/check-challenge-progress")
+async def check_challenge_progress(agent_id: str, game_state: Dict[str, Any]):
+    """
+    Check progress of an agent in a challenge.
+    Called after each game step to update objectives and check win/loss conditions.
+    """
+    if agent_id not in challenge_states:
+        return {"has_challenge": False}
+
+    challenge_state = challenge_states[agent_id]
+    challenge = get_challenge_by_id(challenge_state.challenge_id)
+
+    if not challenge:
+        return {"has_challenge": False, "error": "Challenge not found"}
+
+    # Update elapsed time
+    challenge_state.elapsed_time = time.time() - challenge_state.start_time
+    challenge_state.current_position = game_state.get("position")
+
+    # Check if already completed or failed
+    if challenge_state.is_completed or challenge_state.is_failed:
+        return {
+            "has_challenge": True,
+            "challenge_id": challenge_state.challenge_id,
+            "completed": challenge_state.is_completed,
+            "failed": challenge_state.is_failed,
+            "failure_reason": challenge_state.failure_reason,
+            "objectives_completed": challenge_state.objectives_completed,
+            "elapsed_time": challenge_state.elapsed_time
+        }
+
+    # Check time limit
+    if challenge.win_condition.time_limit:
+        if challenge_state.elapsed_time > challenge.win_condition.time_limit:
+            challenge_state.is_failed = True
+            challenge_state.failure_reason = "Time limit exceeded"
+            logger.info(f"❌ Challenge failed for '{agent_id}': Time limit exceeded")
+            return {
+                "has_challenge": True,
+                "completed": False,
+                "failed": True,
+                "failure_reason": "Time limit exceeded",
+                "elapsed_time": challenge_state.elapsed_time
+            }
+
+    # Check each objective
+    newly_completed = []
+    for objective in challenge.objectives:
+        if objective.id in challenge_state.objectives_completed:
+            continue  # Already completed
+
+        if check_objective_completion(objective, game_state, challenge_state):
+            challenge_state.objectives_completed.append(objective.id)
+            newly_completed.append(objective.id)
+            logger.info(f"✓ Objective completed for '{agent_id}': {objective.description}")
+
+    # Check win condition
+    is_won = check_win_condition(challenge, challenge_state)
+    if is_won:
+        challenge_state.is_completed = True
+        logger.info(f"🎉 Challenge completed for '{agent_id}' in {challenge_state.elapsed_time:.2f}s!")
+
+    return {
+        "has_challenge": True,
+        "challenge_id": challenge_state.challenge_id,
+        "completed": is_won,
+        "failed": False,
+        "objectives_completed": challenge_state.objectives_completed,
+        "newly_completed": newly_completed,
+        "total_objectives": len(challenge.objectives),
+        "elapsed_time": challenge_state.elapsed_time,
+        "time_limit": challenge.win_condition.time_limit
+    }
+
+
+def check_objective_completion(
+    objective: Objective,
+    game_state: Dict[str, Any],
+    challenge_state: ChallengeState
+) -> bool:
+    """Check if a specific objective is completed"""
+
+    if objective.type == ObjectiveType.REACH_ZONE:
+        # Check if agent is in target zone
+        pos = game_state.get("position", {})
+        if not pos:
+            return False
+        target = objective.target
+        distance = ((pos["x"] - target["x"])**2 + (pos["y"] - target["y"])**2)**0.5
+        is_in_zone = distance <= target["radius"]
+        if is_in_zone:
+            logger.info(f"Agent at ({pos['x']:.1f}, {pos['y']:.1f}), target ({target['x']}, {target['y']}), distance: {distance:.1f}")
+        return is_in_zone
+
+    elif objective.type == ObjectiveType.COLLECT_ITEM:
+        # Check if agent performed collect action near the item
+        target = objective.target
+        item_pos = target.get("item_position", {})
+        collection_radius = target.get("collection_radius", 15)
+
+        pos = game_state.get("position", {})
+        if not pos:
+            return False
+
+        # Calculate distance to item
+        distance = ((pos["x"] - item_pos["x"])**2 + (pos["y"] - item_pos["y"])**2)**0.5
+
+        # Check if agent is close enough and has used collect action
+        if distance <= collection_radius:
+            # Check if collect action was used recently
+            agent_state = agents.get(challenge_state.agent_id)
+            if agent_state and agent_state.past_actions:
+                # Check last action
+                for action in agent_state.past_actions[-3:]:  # Check last 3 actions
+                    if action.get("action") == "collect":
+                        challenge_state.item_collected = True
+                        logger.info(f"Item collected! Agent at ({pos['x']:.1f}, {pos['y']:.1f}), item at ({item_pos['x']}, {item_pos['y']}), distance: {distance:.1f}")
+                        return True
+
+        return challenge_state.item_collected
+
+    return False
+
+
+def check_win_condition(challenge: Challenge, challenge_state: ChallengeState) -> bool:
+    """Check if win condition is met"""
+    wc = challenge.win_condition
+
+    if wc.type == "all_objectives":
+        required_objectives = [
+            obj.id for obj in challenge.objectives if obj.required
+        ]
+        all_completed = all(
+            obj_id in challenge_state.objectives_completed
+            for obj_id in required_objectives
+        )
+        return all_completed
+
+    elif wc.type == "any_objective":
+        return any(
+            obj_id in challenge_state.objectives_completed
+            for obj_id in wc.objectives
+        )
+
+    return False
+
+
 @app.post("/add-agent")
 async def add_agent(request: AddAgentRequest):
     """
@@ -749,6 +970,7 @@ async def add_agent(request: AddAgentRequest):
         request: Request containing agent_id, blocks, and optional game registration parameters
     """
     agent_id = request.agent_id
+    challenge_id = request.challenge_id
 
     # Check if agent already exists
     if agent_id in agents:
@@ -756,6 +978,28 @@ async def add_agent(request: AddAgentRequest):
             status_code=400,
             detail=f"Agent with ID '{agent_id}' already exists"
         )
+
+    # Validate blocks against challenge constraints if challenge_id provided
+    if challenge_id:
+        challenge = get_challenge_by_id(challenge_id)
+        if not challenge:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Challenge '{challenge_id}' not found"
+            )
+
+        # Validate blocks meet challenge constraints
+        validation_result = validate_blocks_for_challenge(
+            [block.model_dump() for block in request.blocks],
+            challenge
+        )
+        if not validation_result["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Block validation failed: {'; '.join(validation_result['errors'])}"
+            )
+
+        logger.info(f"✓ Blocks validated successfully for challenge '{challenge_id}'")
 
     # Find the onStart action block
     on_start_block = None
@@ -783,11 +1027,21 @@ async def add_agent(request: AddAgentRequest):
     agent_state = AgentState(
         agent_id=agent_id,
         program=program,
-        current_node=on_start_block.next
+        current_node=on_start_block.next,
+        challenge_id=challenge_id
     )
 
     # Add agent to backend state
     agents[agent_id] = agent_state
+
+    # Initialize challenge state if challenge_id provided
+    if challenge_id:
+        challenge_states[agent_id] = ChallengeState(
+            challenge_id=challenge_id,
+            agent_id=agent_id,
+            start_time=time.time()
+        )
+        logger.info(f"✓ Challenge state initialized for agent '{agent_id}' in challenge '{challenge_id}'")
 
     # Register in game environment if requested
     game_registration = None
@@ -1311,6 +1565,19 @@ async def next_step_for_agents(request: NextStepRequest) -> NextStepResponse:
         tool_type=tool_choice,
         parameters=parameters
     )
+
+    # Check challenge progress if agent is in a challenge
+    challenge_progress = None
+    if agent_id in challenge_states:
+        try:
+            game_state_dict = request.game_state.model_dump() if hasattr(request.game_state, 'model_dump') else request.game_state
+            challenge_progress = await check_challenge_progress(agent_id, game_state_dict)
+            if challenge_progress.get("completed"):
+                logger.info(f"🎉 Challenge completed for agent '{agent_id}'!")
+            elif challenge_progress.get("newly_completed"):
+                logger.info(f"✓ New objectives completed: {challenge_progress['newly_completed']}")
+        except Exception as e:
+            logger.error(f"Error checking challenge progress: {e}")
 
     return NextStepResponse(
         agent_id=agent_id,

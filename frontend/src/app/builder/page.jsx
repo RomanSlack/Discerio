@@ -93,6 +93,14 @@ export default function AgentGameBuilder() {
   const [connections, setConnections] = useState([]);
   const [agentId, setAgentId] = useState('');
 
+  // Challenge state
+  const [challengeId, setChallengeId] = useState(null);
+  const [challenge, setChallenge] = useState(null);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [showHints, setShowHints] = useState(false);
+  const [challengeProgress, setChallengeProgress] = useState(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+
   const [draggedBlock, setDraggedBlock] = useState(null);
   const [draggingFromPalette, setDraggingFromPalette] = useState(null);
   const [connectingFrom, setConnectingFrom] = useState(null);
@@ -124,6 +132,15 @@ export default function AgentGameBuilder() {
   // Load from localStorage only on client side after mount
   useEffect(() => {
     setIsClient(true);
+
+    // Check for challenge ID in URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const challengeParam = urlParams.get('challenge');
+    if (challengeParam) {
+      setChallengeId(challengeParam);
+      fetchChallenge(challengeParam);
+    }
+
     try {
       const savedBlocks = localStorage.getItem('agent-builder-blocks');
       const savedConnections = localStorage.getItem('agent-builder-connections');
@@ -701,6 +718,107 @@ export default function AgentGameBuilder() {
     return getBlockConnectionPoint(blockId, null);
   };
 
+  // Fetch challenge data from backend
+  const fetchChallenge = async (id) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/challenges/${id}`);
+      if (!response.ok) {
+        toast.error('Failed to load challenge');
+        return;
+      }
+      const data = await response.json();
+      setChallenge(data.challenge);
+      toast.success(`Challenge loaded: ${data.challenge.title}`);
+    } catch (error) {
+      console.error('Error fetching challenge:', error);
+      toast.error('Error loading challenge');
+    }
+  };
+
+  // Validate blocks against challenge constraints
+  const validateBlocks = () => {
+    if (!challenge) return { valid: true, errors: [] };
+
+    const errors = [];
+    const constraints = challenge.block_constraints;
+
+    // Get tool blocks
+    const toolBlocks = blocks.filter(b => b.blockType === 'tool');
+    const toolTypes = toolBlocks.map(b => b.tool_type);
+
+    // Check allowed blocks
+    if (constraints.allowed_blocks) {
+      const invalidTools = toolBlocks.filter(
+        b => !constraints.allowed_blocks.includes(b.tool_type)
+      );
+      if (invalidTools.length > 0) {
+        errors.push(`These tools are not allowed: ${invalidTools.map(b => b.tool_type).join(', ')}`);
+      }
+    }
+
+    // Check max blocks
+    if (constraints.max_blocks && blocks.length > constraints.max_blocks) {
+      errors.push(`Too many blocks! Maximum: ${constraints.max_blocks}, Current: ${blocks.length}`);
+    }
+
+    // Check required blocks
+    if (constraints.required_blocks) {
+      const missingTools = constraints.required_blocks.filter(
+        required => !toolTypes.includes(required)
+      );
+      if (missingTools.length > 0) {
+        errors.push(`Missing required tools: ${missingTools.join(', ')}`);
+      }
+    }
+
+    // Check forbidden blocks
+    if (constraints.forbidden_blocks) {
+      const forbiddenUsed = toolBlocks.filter(
+        b => constraints.forbidden_blocks.includes(b.tool_type)
+      );
+      if (forbiddenUsed.length > 0) {
+        errors.push(`Forbidden tools used: ${forbiddenUsed.map(b => b.tool_type).join(', ')}`);
+      }
+    }
+
+    setValidationErrors(errors);
+    return { valid: errors.length === 0, errors };
+  };
+
+  // Poll for challenge progress
+  useEffect(() => {
+    if (!isClient || !challengeId || !agentId) return;
+
+    const pollProgress = async () => {
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/check-challenge-progress?agent_id=${agentId}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent_id: agentId, game_state: {} })
+          }
+        );
+        const data = await response.json();
+
+        if (data.has_challenge) {
+          setChallengeProgress(data);
+
+          // Show completion modal when challenge is completed
+          if (data.completed && !showCompletionModal) {
+            setShowCompletionModal(true);
+            toast.success('🎉 Challenge Completed!');
+          }
+        }
+      } catch (error) {
+        console.error('Error polling challenge progress:', error);
+      }
+    };
+
+    const interval = setInterval(pollProgress, 1000);
+    return () => clearInterval(interval);
+  }, [isClient, challengeId, agentId, showCompletionModal]);
+
   // Deploy agent to backend
   const handleDeploy = async () => {
     if (!agentId.trim()) {
@@ -713,6 +831,15 @@ export default function AgentGameBuilder() {
     if (!hasOnStart) {
       toast.error('You must have at least one "On Start" block!');
       return;
+    }
+
+    // Validate blocks against challenge constraints
+    if (challengeId) {
+      const validation = validateBlocks();
+      if (!validation.valid) {
+        toast.error(`Validation failed:\n${validation.errors.join('\n')}`);
+        return;
+      }
     }
 
     setDeploying(true);
@@ -760,6 +887,7 @@ export default function AgentGameBuilder() {
       const payload = {
         agent_id: agentId.trim(),
         blocks: backendBlocks,
+        challenge_id: challengeId || undefined,  // Include challenge_id if present
       };
 
       console.log('Deploying:', JSON.stringify(payload, null, 2));
@@ -797,19 +925,147 @@ export default function AgentGameBuilder() {
   };
 
   return (
-    <div
-      className={`flex h-[calc(100vh-4rem)] overflow-hidden ${theme.bg.primary}`}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-    >
-      {/* Global animations */}
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `}</style>
-      {/* Left Column - Game Preview & Run Button (2/5 width) */}
+    <div className={`flex flex-col h-[calc(100vh-4rem)] overflow-hidden ${theme.bg.primary}`}>
+      {/* Challenge Banner */}
+      {challenge && (
+        <div className="bg-blue-600 text-white p-4 border-b border-blue-700 flex-shrink-0">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-xl font-bold">{challenge.title}</h2>
+                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                  challenge.difficulty === 'easy' ? 'bg-green-700' :
+                  challenge.difficulty === 'medium' ? 'bg-yellow-700' :
+                  'bg-red-700'
+                }`}>
+                  {challenge.difficulty}
+                </span>
+              </div>
+              <p className="text-sm text-blue-100 mb-3">{challenge.description}</p>
+
+              {/* Objectives */}
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold mb-2">Objectives:</h3>
+                <ul className="space-y-1">
+                  {challenge.objectives.map(obj => (
+                    <li key={obj.id} className="text-sm flex items-center gap-2">
+                      {challengeProgress?.objectives_completed.includes(obj.id) ? (
+                        <span className="text-green-400">✓</span>
+                      ) : (
+                        <span className="text-blue-300">○</span>
+                      )}
+                      <span className={challengeProgress?.objectives_completed.includes(obj.id) ? 'line-through text-blue-200' : ''}>
+                        {obj.description}
+                      </span>
+                      {obj.required && <span className="text-red-300 text-xs">(Required)</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Progress */}
+              {challengeProgress && (
+                <div className="flex gap-4 text-sm">
+                  <span>Progress: {challengeProgress.objectives_completed.length}/{challengeProgress.total_objectives}</span>
+                  {challengeProgress.time_limit && (
+                    <span>Time: {challengeProgress.elapsed_time.toFixed(1)}s / {challengeProgress.time_limit}s</span>
+                  )}
+                </div>
+              )}
+
+              {/* Constraints */}
+              {challenge.block_constraints && (
+                <div className="mt-2 text-xs text-blue-200">
+                  {challenge.block_constraints.allowed_blocks && (
+                    <span>Allowed: {challenge.block_constraints.allowed_blocks.join(', ')}</span>
+                  )}
+                  {challenge.block_constraints.max_blocks && (
+                    <span className="ml-3">Max: {challenge.block_constraints.max_blocks} blocks</span>
+                  )}
+                </div>
+              )}
+
+              {/* Validation Errors */}
+              {validationErrors.length > 0 && (
+                <div className="mt-3 p-2 bg-red-900 rounded text-sm">
+                  <strong>Validation Errors:</strong>
+                  <ul className="list-disc list-inside mt-1">
+                    {validationErrors.map((error, i) => (
+                      <li key={i}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Hints Toggle */}
+            <button
+              onClick={() => setShowHints(!showHints)}
+              className="ml-4 px-3 py-1 bg-yellow-600 rounded hover:bg-yellow-500 text-sm font-semibold flex-shrink-0"
+            >
+              {showHints ? 'Hide' : 'Show'} Hints
+            </button>
+          </div>
+
+          {/* Hints Panel */}
+          {showHints && challenge.hints && (
+            <div className="mt-3 p-3 bg-yellow-900 bg-opacity-50 rounded">
+              <h3 className="font-semibold mb-2 text-sm">💡 Hints:</h3>
+              <ul className="list-disc list-inside space-y-1">
+                {challenge.hints.map((hint, i) => (
+                  <li key={i} className="text-sm text-yellow-100">{hint}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Completion Modal */}
+      {showCompletionModal && challengeProgress?.completed && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+          <div className="bg-green-900 p-8 rounded-lg text-center max-w-md text-white">
+            <h2 className="text-4xl font-bold mb-4">🎉 Challenge Complete!</h2>
+            <p className="text-xl mb-4">
+              Time: {challengeProgress.elapsed_time.toFixed(2)}s
+            </p>
+            <p className="mb-6">
+              All objectives completed successfully!
+            </p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={() => setShowCompletionModal(false)}
+                className="px-6 py-3 bg-blue-600 rounded hover:bg-blue-500"
+              >
+                Continue Building
+              </button>
+              {challenge.next_challenge_id && (
+                <button
+                  onClick={() => window.location.href = `/builder?challenge=${challenge.next_challenge_id}`}
+                  className="px-6 py-3 bg-green-600 rounded hover:bg-green-500"
+                >
+                  Next Challenge →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div
+        className="flex flex-1 overflow-hidden"
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+      >
+        {/* Global animations */}
+        <style jsx>{`
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        `}</style>
+        {/* Left Column - Game Preview & Run Button (2/5 width) */}
       <div className={`w-2/5 flex flex-col ${theme.bg.secondary} ${theme.border.primary} border-r shadow-lg h-full overflow-hidden`}>
         {/* Top - Game Iframe */}
         <div className="flex-1 p-3 flex flex-col min-h-0 overflow-hidden">
@@ -1679,6 +1935,7 @@ function AgentConfigModal({ block, onSave, onDelete, onClose }) {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
