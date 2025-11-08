@@ -151,7 +151,7 @@ class GameState(BaseModel):
     # Example fields (these are placeholders and will be updated later)
     agent_id: Optional[str] = None
     position: Optional[Dict[str, float]] = None
-    health: Optional[int] = None
+    health: Optional[float] = None
     nearby_agents: Optional[List[Dict[str, Any]]] = None
     inventory: Optional[List[str]] = None
 
