@@ -132,6 +132,15 @@ export class Game {
         for (const player of this.players.values()) {
             if (!player.dead) {
                 player.update(this);
+            } else {
+                // Auto-respawn after 3 seconds
+                if (!player['respawnTime']) {
+                    player['respawnTime'] = now + 3000;
+                } else if (now >= player['respawnTime']) {
+                    const spawnPoint = this.getRandomRespawnPoint();
+                    player.respawn(spawnPoint, this);
+                    delete player['respawnTime'];
+                }
             }
         }
 
@@ -139,6 +148,15 @@ export class Game {
         for (const agent of this.aiAgents.values()) {
             if (!agent.dead) {
                 agent.update(this);
+            } else {
+                // Auto-respawn after 3 seconds
+                if (!agent['respawnTime']) {
+                    agent['respawnTime'] = now + 3000;
+                } else if (now >= agent['respawnTime']) {
+                    const spawnPoint = this.getRandomRespawnPoint();
+                    agent.respawn(spawnPoint, this);
+                    delete agent['respawnTime'];
+                }
             }
         }
 
@@ -411,5 +429,54 @@ export class Game {
         // Fallback to center (should rarely happen)
         console.warn("[Game] Could not find valid spawn point, using center");
         return Vec(GameConstants.MAP_WIDTH / 2, GameConstants.MAP_HEIGHT / 2);
+    }
+
+    /**
+     * Get a random respawn point (further from center for respawns)
+     */
+    private getRandomRespawnPoint(): Vector {
+        const zone1Center = Vec(256, 256);
+        const minDistanceFromCenter = 60; // Further from center
+        const maxDistanceFromCenter = 120;
+
+        let attempts = 0;
+        while (attempts < 100) {
+            // Random angle and distance from center
+            const angle = Math.random() * Math.PI * 2;
+            const distance = minDistanceFromCenter + Math.random() * (maxDistanceFromCenter - minDistanceFromCenter);
+
+            const spawnPos = Vec(
+                zone1Center.x + Math.cos(angle) * distance,
+                zone1Center.y + Math.sin(angle) * distance
+            );
+
+            // Make sure within map bounds (Zone 1)
+            if (spawnPos.x < 20 || spawnPos.x > 492 || spawnPos.y < 20 || spawnPos.y > 492) {
+                attempts++;
+                continue;
+            }
+
+            // Check for obstacle collisions
+            const playerHitbox = new CircleHitbox(GameConstants.PLAYER_RADIUS, spawnPos);
+            const nearbyObjects = this.grid.intersectsHitbox(playerHitbox);
+
+            let collision = false;
+            for (const obj of nearbyObjects) {
+                if (playerHitbox.collidesWith(obj.hitbox)) {
+                    collision = true;
+                    break;
+                }
+            }
+
+            if (!collision) {
+                return spawnPos;
+            }
+
+            attempts++;
+        }
+
+        // Fallback to center
+        console.warn("[Game] Could not find valid respawn point, using center");
+        return zone1Center;
     }
 }

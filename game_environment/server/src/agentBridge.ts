@@ -25,6 +25,7 @@ export interface BackendGameState {
     ammo: { [key: string]: number };
     xp: number;
     level: number;
+    just_died: boolean; // Flag indicating agent just died and respawned
     nearby_agents: Array<{
         id: string;
         position: { x: number; y: number };
@@ -249,6 +250,7 @@ export class AgentBridge {
             ammo: Object.fromEntries(agent.ammo),
             xp: agent.xp,
             level: agent.getLevel(),
+            just_died: agent.justDied,
             nearby_agents: nearbyAgents.sort((a, b) => a.distance - b.distance),
             nearby_loot: nearbyLoot.sort((a, b) => a.distance - b.distance),
             nearby_obstacles: nearbyObstacles.sort((a, b) => a.distance - b.distance)

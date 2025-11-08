@@ -318,6 +318,32 @@ export class Player extends GameObject {
         this.health = 0;
     }
 
+    respawn(position: Vector, game: any): void {
+        this.dead = false;
+        this.position = position;
+        this.hitbox.position = position;
+
+        // Reset stats
+        const healthMultiplier = this.getStatMultiplier();
+        this.health = GameConstants.PLAYER_MAX_HEALTH * healthMultiplier;
+        this.maxHealth = GameConstants.PLAYER_MAX_HEALTH * healthMultiplier;
+        this.xp = 0; // Reset XP to 0
+
+        // Reset weapons and ammo
+        this.weapons = [null, null];
+        this.activeWeaponIndex = 0;
+        this.addWeapon("fists");
+        this.addWeapon("pistol");
+        this.ammo.set("9mm", 45);
+        this.ammo.set("556mm", 0);
+        this.ammo.set("12g", 0);
+
+        // Update grid
+        game.grid.updateObject(this);
+
+        console.log(`[Player ${this.username}] Respawned at (${position.x.toFixed(0)}, ${position.y.toFixed(0)}) with 0 XP`);
+    }
+
     addXP(amount: number): void {
         this.xp += amount;
     }
