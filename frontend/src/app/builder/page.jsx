@@ -1320,7 +1320,7 @@ export default function AgentGameBuilder() {
                     backgroundColor: block.color,
                     padding: '8px 16px',
                     zIndex: isExecuting ? 20 : 10,
-                    border: connectingFrom === block.id ? '3px solid yellow' : isExecuting ? `3px solid ${highlightColor}` : '2px solid rgba(0,0,0,0.2)',
+                    border: connectingFrom === block.id ? '3px solid yellow' : isExecuting ? `3px solid ${highlightColor}` : '3px solid rgba(0,0,0,0.2)',
                     boxShadow: isExecuting ? `0 0 25px 8px ${glowColor}` : 'none',
                     transition: 'border 300ms ease-in-out, box-shadow 300ms ease-in-out',
                   }}
