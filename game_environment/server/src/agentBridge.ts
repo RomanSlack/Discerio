@@ -24,6 +24,13 @@ export interface BackendGameState {
     max_health: number;
     inventory: string[];
     ammo: { [key: string]: number };
+    weapon_state: {
+        active_weapon: string;
+        active_weapon_ammo: number;
+        active_weapon_capacity: number;
+        can_shoot: boolean;
+        is_reloading: boolean;
+    };
     xp: number;
     level: number;
     just_died: boolean; // Flag indicating agent just died and respawned
@@ -222,6 +229,16 @@ export class AgentBridge {
         if (agent.weapons[0]) inventory.push(agent.weapons[0].definition.idString);
         if (agent.weapons[1]) inventory.push(agent.weapons[1].definition.idString);
 
+        // Get active weapon state for better agent decision making
+        const activeWeapon = agent.weapons[agent.activeWeaponIndex];
+        const weaponState = {
+            active_weapon: activeWeapon ? activeWeapon.definition.idString : "none",
+            active_weapon_ammo: activeWeapon ? activeWeapon.ammo : 0,
+            active_weapon_capacity: activeWeapon ? activeWeapon.definition.capacity : 0,
+            can_shoot: activeWeapon ? activeWeapon.canShoot(Date.now()) : false,
+            is_reloading: activeWeapon ? activeWeapon.reloading : false
+        };
+
         // Get nearby agents (both human players and AI agents)
         const nearbyAgents: BackendGameState["nearby_agents"] = [];
 
@@ -294,6 +311,7 @@ export class AgentBridge {
             max_health: agent.maxHealth,
             inventory,
             ammo: Object.fromEntries(agent.ammo),
+            weapon_state: weaponState,
             xp: agent.xp,
             level: agent.getLevel(),
             just_died: agent.justDied,

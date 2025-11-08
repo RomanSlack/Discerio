@@ -115,16 +115,16 @@ const ZONE_1_DATA = {
         { type: "pistol", x: 150, y: 450, count: 1 },
         { type: "rifle", x: 450, y: 150, count: 1 },
 
-        // Ammo
-        { type: "ammo_9mm", x: 150, y: 150, count: 30 },
-        { type: "ammo_9mm", x: 350, y: 350, count: 30 },
-        { type: "ammo_9mm", x: 200, y: 400, count: 30 },
-        { type: "ammo_556mm", x: 300, y: 200, count: 60 },
-        { type: "ammo_556mm", x: 450, y: 350, count: 60 },
-        { type: "ammo_556mm", x: 100, y: 300, count: 60 },
-        { type: "ammo_12g", x: 350, y: 150, count: 16 },
-        { type: "ammo_12g", x: 200, y: 450, count: 16 },
-        { type: "ammo_12g", x: 450, y: 250, count: 16 },
+        // Ammo - reduced amounts for scarcity
+        { type: "ammo_9mm", x: 150, y: 150, count: 15 },
+        { type: "ammo_9mm", x: 350, y: 350, count: 15 },
+        { type: "ammo_9mm", x: 200, y: 400, count: 15 },
+        { type: "ammo_556mm", x: 300, y: 200, count: 30 },
+        { type: "ammo_556mm", x: 450, y: 350, count: 30 },
+        { type: "ammo_556mm", x: 100, y: 300, count: 30 },
+        { type: "ammo_12g", x: 350, y: 150, count: 8 },
+        { type: "ammo_12g", x: 200, y: 450, count: 8 },
+        { type: "ammo_12g", x: 450, y: 250, count: 8 },
 
         // XP Orbs scattered around the map
         { type: "xp_orb", x: 80, y: 80, count: 10 },

@@ -292,20 +292,20 @@ export class AIAgent extends GameObject {
 
         this.health -= amount;
 
-        // Lose XP when hit (20% of damage as XP loss, min 5 XP)
-        const xpLoss = Math.max(5, Math.floor(amount * 0.2));
+        // Lose XP when hit (10% of damage as XP loss, min 2 XP)
+        const xpLoss = Math.max(2, Math.floor(amount * 0.1));
         this.xp = Math.max(0, this.xp - xpLoss);
 
-        // Attacker gains XP (10 XP per hit)
+        // Attacker gains XP (3 XP per hit - reduced for balance)
         if (source && 'xp' in source && source !== this) {
-            source.xp += 10;
+            source.xp += 3;
         }
 
         if (this.health <= 0) {
             this.health = 0;
-            // On death, attacker gets kill bonus XP (50 XP)
+            // On death, attacker gets kill bonus XP (25 XP - reduced for balance)
             if (source && 'xp' in source && source !== this) {
-                source.xp += 50;
+                source.xp += 25;
             }
             this.die();
         }
@@ -328,12 +328,12 @@ export class AIAgent extends GameObject {
         this.maxHealth = GameConstants.PLAYER_MAX_HEALTH * healthMultiplier;
         this.xp = 0; // Reset XP to 0
 
-        // Reset weapons and ammo
+        // Reset weapons and ammo - limited starting ammo
         this.weapons = [null, null];
         this.activeWeaponIndex = 0;
         this.addWeapon("fists");
         this.addWeapon("pistol");
-        this.ammo.set("9mm", 45);
+        this.ammo.set("9mm", 15); // Only 1 magazine worth
         this.ammo.set("556mm", 0);
         this.ammo.set("12g", 0);
 

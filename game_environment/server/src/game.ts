@@ -232,7 +232,7 @@ export class Game {
         // Give fists and starter pistol
         player.addWeapon("fists");
         player.addWeapon("pistol");
-        player.addAmmo("9mm", 45);
+        player.addAmmo("9mm", 15); // Only 1 magazine worth
 
         this.players.set(player.id, player);
         this.grid.addObject(player);
@@ -267,7 +267,7 @@ export class Game {
         // Give fists and starter pistol
         agent.addWeapon("fists");
         agent.addWeapon("pistol");
-        agent.addAmmo("9mm", 45);
+        agent.addAmmo("9mm", 15); // Only 1 magazine worth
 
         this.aiAgents.set(agentId, agent);
         this.grid.addObject(agent);

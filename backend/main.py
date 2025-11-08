@@ -407,22 +407,45 @@ async def shutdown_event():
 def game_state_to_llm_format(game_state: GameState) -> str:
     """
     Convert game state to LLM-readable format.
-    This is a dummy implementation for now since we don't know the exact structure yet.
     """
-    # Dummy conversion - just convert to a readable string format
     parts = []
 
     if game_state.position:
-        parts.append(f"Position: x={game_state.position.get('x', 0)}, y={game_state.position.get('y', 0)}")
+        parts.append(f"Position: x={game_state.position.get('x', 0):.1f}, y={game_state.position.get('y', 0):.1f}")
 
     if game_state.health is not None:
-        parts.append(f"Health: {game_state.health}")
+        parts.append(f"Health: {game_state.health:.0f}/{game_state.max_health:.0f}")
+
+    # Add weapon state information
+    if hasattr(game_state, 'weapon_state') and game_state.weapon_state:
+        ws = game_state.weapon_state
+        weapon_info = f"Weapon: {ws.get('active_weapon', 'none')}"
+        if ws.get('active_weapon') != 'fists':
+            weapon_info += f" ({ws.get('active_weapon_ammo', 0)}/{ws.get('active_weapon_capacity', 0)} ammo)"
+            if ws.get('is_reloading'):
+                weapon_info += " [RELOADING]"
+            elif not ws.get('can_shoot'):
+                weapon_info += " [COOLDOWN]"
+        parts.append(weapon_info)
+
+    # Add ammo reserves
+    if hasattr(game_state, 'ammo') and game_state.ammo:
+        ammo_parts = []
+        for ammo_type, count in game_state.ammo.items():
+            if count > 0:
+                ammo_parts.append(f"{ammo_type}: {count}")
+        if ammo_parts:
+            parts.append(f"Ammo reserves: {', '.join(ammo_parts)}")
 
     if game_state.inventory:
         parts.append(f"Inventory: {', '.join(game_state.inventory)}")
 
+    if hasattr(game_state, 'xp') and game_state.xp is not None:
+        level = game_state.level if hasattr(game_state, 'level') else 0
+        parts.append(f"XP: {game_state.xp} (Level {level})")
+
     if game_state.nearby_agents:
-        parts.append(f"Nearby agents: {', '.join([agent['id'] for agent in game_state.nearby_agents])}")
+        parts.append(f"Nearby agents: {len(game_state.nearby_agents)}")
 
     if not parts:
         return "No specific game state information available."
@@ -510,7 +533,7 @@ async def execute_agent_block(
         else:
             attack_context = "\nNo nearby agents to attack.\n"
 
-    # Construct the input prompt
+    # Construct the input prompt with ammo management context
     user_input = (
         f"{agent_block.user_prompt}\n\n"
         f"Current game state: {game_state_str}\n"
@@ -524,14 +547,22 @@ async def execute_agent_block(
         f"- Keep movements SMALL and gradual (recommended: -20 to +20 per move)\n"
         f"- Y-axis: NEGATIVE y moves UP (toward y=8), POSITIVE y moves DOWN (toward y=504)\n"
         f"- X-axis: NEGATIVE x moves LEFT (toward x=8), POSITIVE x moves RIGHT (toward x=504)\n"
-        f"ATTACK:\n"
+        f"ATTACK & AMMO MANAGEMENT:\n"
         f"- Attack tool will auto-aim at the target and shoot your equipped weapon\n"
         f"- Attacking happens BEFORE movement in the game tick\n"
+        f"- AMMO IS LIMITED - conserve it! You start with only 15 rounds (1 magazine)\n"
+        f"- Check your weapon_state to see current ammo before attacking\n"
+        f"- If weapon shows [RELOADING] or [COOLDOWN], you CANNOT attack\n"
+        f"- Weapons have fire delays: pistol=250ms, rifle=200ms, shotgun=1200ms\n"
+        f"- Look for ammo loot (ammo_9mm, ammo_556mm, ammo_12g) on the ground when low\n"
+        f"- Use 'collect' action to pick up nearby ammo and items\n"
+        f"- Combat is less deadly now - focus on survival and resource gathering\n"
         f"- Choose a target from the nearby agents list above\n\n"
         f"Respond with nothing but a JSON object containing 'reasoning' (a brief 1-sentence explanation), 'action' (the action name), and 'parameters' (an object with the required parameters).\n"
         f"Examples:\n"
         f"- Move: {{\"reasoning\": \"Moving toward center\", \"action\": \"move\", \"parameters\": {{\"x\": 5, \"y\": -10}}}}\n"
-        f"- Attack: {{\"reasoning\": \"Attacking nearest enemy\", \"action\": \"attack\", \"parameters\": {{\"target_player_id\": \"player_2\"}}}}"
+        f"- Attack: {{\"reasoning\": \"Attacking nearest enemy\", \"action\": \"attack\", \"parameters\": {{\"target_player_id\": \"player_2\"}}}}\n"
+        f"- Collect: {{\"reasoning\": \"Picking up ammo\", \"action\": \"collect\", \"parameters\": {{}}}}"
     )
 
     full_input = agent_block.system_prompt + "\n\n" + user_input
