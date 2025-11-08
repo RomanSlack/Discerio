@@ -28,7 +28,7 @@ const server = Bun.serve<ConnectionData>({
     hostname: config.hostname,
     port: config.port,
 
-    fetch(req, server) {
+    async fetch(req, server) {
         const url = new URL(req.url);
 
         // Handle CORS preflight requests
@@ -52,6 +52,7 @@ const server = Bun.serve<ConnectionData>({
             const status = {
                 online: true,
                 players: game.players.size,
+                aiAgents: game.aiAgents.size,
                 uptime: process.uptime(),
                 timestamp: Date.now()
             };
@@ -60,6 +61,184 @@ const server = Bun.serve<ConnectionData>({
                     "Content-Type": "application/json",
                     ...corsHeaders
                 }
+            });
+        }
+
+        // AI Agent API: Register new agent
+        if (url.pathname === "/api/agent/register" && req.method === "POST") {
+            try {
+                const body = await req.json();
+                const { agent_id, username } = body;
+
+                if (!agent_id) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: "agent_id is required"
+                    }), {
+                        status: 400,
+                        headers: { "Content-Type": "application/json", ...corsHeaders }
+                    });
+                }
+
+                // Check if agent already exists
+                if (game.aiAgents.has(agent_id)) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: `Agent with ID ${agent_id} already exists`
+                    }), {
+                        status: 409,
+                        headers: { "Content-Type": "application/json", ...corsHeaders }
+                    });
+                }
+
+                const agent = game.addAIAgent(agent_id, username);
+                const gameState = game.agentBridge.getGameStateForAgent(agent);
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    agent_id,
+                    position: { x: agent.position.x, y: agent.position.y },
+                    game_state: gameState
+                }), {
+                    status: 201,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            } catch (error: any) {
+                console.error("[Server] Error registering agent:", error);
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: error.message || "Failed to register agent"
+                }), {
+                    status: 500,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+        }
+
+        // AI Agent API: Send command to agent
+        if (url.pathname === "/api/agent/command" && req.method === "POST") {
+            try {
+                const body = await req.json();
+                const { agent_id, action } = body;
+
+                if (!agent_id || !action) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: "agent_id and action are required"
+                    }), {
+                        status: 400,
+                        headers: { "Content-Type": "application/json", ...corsHeaders }
+                    });
+                }
+
+                const agent = game.aiAgents.get(agent_id);
+                if (!agent) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: `Agent ${agent_id} not found`
+                    }), {
+                        status: 404,
+                        headers: { "Content-Type": "application/json", ...corsHeaders }
+                    });
+                }
+
+                // Convert action to input packet
+                const inputPacket = game.agentBridge.actionToInput(agent_id, action, agent);
+                agent.setCommand(inputPacket);
+
+                // Get updated game state
+                const gameState = game.agentBridge.getGameStateForAgent(agent);
+
+                return new Response(JSON.stringify({
+                    success: true,
+                    agent_id,
+                    action_received: action.tool_type,
+                    game_state: gameState
+                }), {
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            } catch (error: any) {
+                console.error("[Server] Error processing agent command:", error);
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: error.message || "Failed to process command"
+                }), {
+                    status: 500,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+        }
+
+        // AI Agent API: Get agent state
+        if (url.pathname.startsWith("/api/agent/state/") && req.method === "GET") {
+            const agent_id = url.pathname.split("/api/agent/state/")[1];
+
+            if (!agent_id) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: "agent_id is required"
+                }), {
+                    status: 400,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+
+            const agent = game.aiAgents.get(agent_id);
+            if (!agent) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: `Agent ${agent_id} not found`
+                }), {
+                    status: 404,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+
+            const gameState = game.agentBridge.getGameStateForAgent(agent);
+
+            return new Response(JSON.stringify({
+                success: true,
+                agent_id,
+                game_state: gameState
+            }), {
+                headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+        }
+
+        // AI Agent API: Remove agent
+        if (url.pathname.startsWith("/api/agent/") && req.method === "DELETE") {
+            const pathParts = url.pathname.split("/");
+            const agent_id = pathParts[3];
+
+            if (!agent_id) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: "agent_id is required"
+                }), {
+                    status: 400,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+
+            const agent = game.aiAgents.get(agent_id);
+            if (!agent) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: `Agent ${agent_id} not found`
+                }), {
+                    status: 404,
+                    headers: { "Content-Type": "application/json", ...corsHeaders }
+                });
+            }
+
+            game.removeAIAgent(agent_id);
+
+            return new Response(JSON.stringify({
+                success: true,
+                agent_id,
+                message: `Agent ${agent_id} removed successfully`
+            }), {
+                headers: { "Content-Type": "application/json", ...corsHeaders }
             });
         }
 

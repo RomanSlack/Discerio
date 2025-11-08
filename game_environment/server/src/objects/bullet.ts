@@ -7,8 +7,8 @@ import type { BulletData } from "../../../common/src/packets";
 import type { GameObject } from "./gameObject";
 
 // Forward declaration to avoid circular dependency
-interface Player extends GameObject {
-    damage(amount: number, source?: Player): void;
+interface Damageable extends GameObject {
+    damage(amount: number, source?: any): void;
 }
 
 export class Bullet {
@@ -19,12 +19,12 @@ export class Bullet {
     speed: number;
     damage: number;
     maxRange: number;
-    shooter: Player;
+    shooter: GameObject;
 
     traveledDistance = 0;
     dead = false;
 
-    constructor(id: number, start: Vector, direction: Vector, gun: GunDefinition, shooter: Player) {
+    constructor(id: number, start: Vector, direction: Vector, gun: GunDefinition, shooter: GameObject) {
         this.id = id;
         this.position = Vec.clone(start);
         this.direction = Vec.normalize(direction);
@@ -76,9 +76,9 @@ export class Bullet {
             if (closestHit.object instanceof Obstacle) {
                 closestHit.object.damage(this.damage);
             } else {
-                // It's a Player
-                const player = closestHit.object as Player;
-                player.damage(this.damage, this.shooter);
+                // It's a Player or AIAgent
+                const damageable = closestHit.object as Damageable;
+                damageable.damage(this.damage, this.shooter);
             }
 
             this.dead = true;

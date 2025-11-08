@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { Grid } from "./utils/grid";
 import { Player } from "./objects/player";
+import { AIAgent } from "./objects/aiAgent";
 import { Spectator } from "./objects/spectator";
 import { Obstacle } from "./objects/obstacle";
 import { Loot } from "./objects/loot";
@@ -13,16 +14,20 @@ import type { GunDefinition } from "../../common/src/definitions/guns";
 import { Geometry } from "../../common/src/utils/math";
 import type { InputPacket, UpdatePacket } from "../../common/src/packets";
 import { PacketType } from "../../common/src/packets";
+import { AgentBridge } from "./agentBridge";
 
 export class Game {
     players: Map<number, Player> = new Map();
+    aiAgents: Map<string, AIAgent> = new Map(); // Map by agentId (string)
     spectators: Map<number, Spectator> = new Map();
     obstacles: Obstacle[] = [];
     loot: Loot[] = [];
     bullets: Bullet[] = [];
     grid: Grid;
+    agentBridge: AgentBridge;
 
     private nextPlayerId = 1;
+    private nextAIAgentId = 1;
     private nextSpectatorId = 1;
     private nextObstacleId = 1;
     private nextLootId = 1;
@@ -38,6 +43,7 @@ export class Game {
 
     constructor() {
         this.grid = new Grid(GameConstants.MAP_WIDTH, GameConstants.MAP_HEIGHT);
+        this.agentBridge = new AgentBridge(this);
         this.loadMap();
     }
 
@@ -104,10 +110,17 @@ export class Game {
             }
         }
 
-        // 3. Serialize and broadcast
+        // 3. Update AI agents
+        for (const agent of this.aiAgents.values()) {
+            if (!agent.dead) {
+                agent.update(this);
+            }
+        }
+
+        // 4. Serialize and broadcast
         this.broadcast();
 
-        // 4. Schedule next tick
+        // 5. Schedule next tick
         this.currentTick++;
         const elapsed = Date.now() - now;
         const delay = Math.max(0, this.tickInterval - elapsed);
@@ -115,10 +128,16 @@ export class Game {
     }
 
     private broadcast(): void {
+        // Combine human players and AI agents into one players array
+        const allPlayers = [
+            ...Array.from(this.players.values()).map(p => p.serialize()),
+            ...Array.from(this.aiAgents.values()).map(a => a.serialize())
+        ];
+
         const packet: UpdatePacket = {
             type: PacketType.Update,
             tick: this.currentTick,
-            players: Array.from(this.players.values()).map(p => p.serialize()),
+            players: allPlayers,
             bullets: this.bullets.map(b => b.serialize()),
             obstacles: this.obstacles.map(o => o.serialize()),
             loot: this.loot.filter(l => !l.picked).map(l => l.serialize())
@@ -185,6 +204,28 @@ export class Game {
         return spectator;
     }
 
+    addAIAgent(agentId: string, username?: string): AIAgent {
+        // Check if agent already exists
+        if (this.aiAgents.has(agentId)) {
+            throw new Error(`AI Agent with ID ${agentId} already exists`);
+        }
+
+        const spawnPoint = this.getRandomSpawnPoint();
+        const displayName = username || `AI_${agentId}`;
+        const agent = new AIAgent(this.nextAIAgentId++, agentId, displayName, spawnPoint);
+
+        // Give starter pistol
+        agent.addWeapon("pistol");
+        agent.addAmmo("9mm", 45);
+
+        this.aiAgents.set(agentId, agent);
+        this.grid.addObject(agent);
+
+        console.log(`[Game] AI Agent ${displayName} (${agentId}) joined at (${spawnPoint.x}, ${spawnPoint.y})`);
+
+        return agent;
+    }
+
     removePlayer(playerId: number): void {
         const player = this.players.get(playerId);
         if (player) {
@@ -202,6 +243,16 @@ export class Game {
         }
     }
 
+    removeAIAgent(agentId: string): void {
+        const agent = this.aiAgents.get(agentId);
+        if (agent) {
+            this.grid.removeObject(agent);
+            this.aiAgents.delete(agentId);
+            this.agentBridge.removeAgentState(agentId);
+            console.log(`[Game] AI Agent ${agent.username} (${agentId}) left`);
+        }
+    }
+
     handleInput(playerId: number, input: InputPacket): void {
         const player = this.players.get(playerId);
         if (player) {
@@ -209,12 +260,12 @@ export class Game {
         }
     }
 
-    createBullet(position: Vector, direction: Vector, gun: GunDefinition, shooter: Player): void {
+    createBullet(position: Vector, direction: Vector, gun: GunDefinition, shooter: Player | AIAgent): void {
         const bullet = new Bullet(this.nextBulletId++, position, direction, gun, shooter);
         this.bullets.push(bullet);
     }
 
-    checkPickups(player: Player): void {
+    checkPickups(player: Player | AIAgent): void {
         const pickupRadiusSquared = GameConstants.PICKUP_RADIUS * GameConstants.PICKUP_RADIUS;
 
         for (const loot of this.loot) {
@@ -227,14 +278,14 @@ export class Game {
                     player.addAmmo(ammoType, loot.count);
                     loot.picked = true;
                     loot.dead = true;
-                    console.log(`[Game] Player ${player.username} picked up ${loot.count}x ${ammoType} ammo`);
+                    console.log(`[Game] ${player.username} picked up ${loot.count}x ${ammoType} ammo`);
                 } else {
                     // It's a weapon
                     const success = player.addWeapon(loot.type);
                     if (success) {
                         loot.picked = true;
                         loot.dead = true;
-                        console.log(`[Game] Player ${player.username} picked up ${loot.type}`);
+                        console.log(`[Game] ${player.username} picked up ${loot.type}`);
                     }
                 }
             }
