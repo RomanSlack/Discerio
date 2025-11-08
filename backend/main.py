@@ -9,6 +9,7 @@ import logging
 import asyncio
 import os
 from game_client import GameEnvironmentClient
+from openai import OpenAI
 
 load_dotenv()
 
@@ -22,6 +23,14 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 DEFAULT_STEP_DELAY = float(os.getenv("STEP_DELAY", "6.0"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "5.0"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Initialize OpenAI client
+openai_client = None
+if OPENAI_API_KEY:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+else:
+    logger.warning("OPENAI_API_KEY not found in environment variables. Chat functionality will be disabled.")
 
 
 # Pydantic Models for Block Types
@@ -937,6 +946,70 @@ async def next_step_for_agents(request: NextStepRequest) -> NextStepResponse:
         action=action,
         current_node=agent_state.current_node
     )
+
+
+class ChatMessage(BaseModel):
+    """Request model for chat endpoint"""
+    message: str = Field(..., description="The user's message")
+    lesson_title: Optional[str] = Field(None, description="Title of the current lesson")
+    lesson_guidelines: Optional[List[str]] = Field(None, description="Guidelines for the current lesson")
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat endpoint"""
+    response: str = Field(..., description="The assistant's response")
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatMessage) -> ChatResponse:
+    """
+    Chat endpoint that uses OpenAI to provide helpful responses about the lesson.
+    """
+    if not openai_client:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat functionality is not available. OPENAI_API_KEY not configured."
+        )
+    
+    try:
+        # Build system prompt with lesson context
+        system_prompt = """You are discer, a helpful AI teaching assistant for an agentic AI learning platform. 
+You help students understand agentic AI concepts and guide them through building AI agents using a visual block-based programming interface.
+
+Be friendly, encouraging, and provide clear explanations. If students ask about specific blocks or concepts, explain them in the context of building agentic AI systems.
+Keep responses concise but informative. If you don't know something specific about the platform, say so honestly."""
+
+        user_prompt = request.message
+        
+        # Add lesson context if available
+        if request.lesson_title:
+            user_prompt = f"Lesson: {request.lesson_title}\n\n{user_prompt}"
+        
+        if request.lesson_guidelines:
+            guidelines_text = "\n".join([f"- {g}" for g in request.lesson_guidelines])
+            user_prompt = f"{user_prompt}\n\nLesson Guidelines:\n{guidelines_text}"
+
+        # Call OpenAI API
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+
+        assistant_message = response.choices[0].message.content
+        
+        return ChatResponse(response=assistant_message)
+    
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate chat response: {str(e)}"
+        )
 
 
 def main():
