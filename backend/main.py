@@ -295,20 +295,39 @@ async def execute_agent_block(
     # Check if plan tool is available
     has_plan_tool = "plan" in available_tools
 
+    # Build attack-specific context if attack tool is available
+    attack_context = ""
+    if "attack" in available_tools:
+        nearby_agents = game_state.nearby_agents if hasattr(game_state, 'nearby_agents') and game_state.nearby_agents else []
+        if nearby_agents:
+            attack_context = "\nNEARBY AGENTS YOU CAN ATTACK:\n"
+            for agent in nearby_agents[:5]:  # Show top 5 nearest
+                attack_context += f"- {agent.get('id')} at distance {agent.get('distance', 0):.1f} (health: {agent.get('health', 0)})\n"
+            attack_context += "\nTo attack, use their ID as target_player_id. Your weapon will auto-aim and shoot.\n"
+        else:
+            attack_context = "\nNo nearby agents to attack.\n"
+
     # Construct the input prompt
     user_input = (
         f"{agent_block.user_prompt}\n\n"
         f"Current game state: {game_state_str}\n\n"
-        f"Available actions:\n" + "\n".join(f"- {info}" for info in available_tools_info) + "\n\n"
-        f"IMPORTANT MOVEMENT RULES:\n"
+        f"Available actions:\n" + "\n".join(f"- {info}" for info in available_tools_info) + "\n"
+        f"{attack_context}\n"
+        f"IMPORTANT RULES:\n"
+        f"MOVEMENT:\n"
         f"- The move tool uses RELATIVE coordinates (how much to move, not where to move to)\n"
         f"- The map bounds are x: 8-504, y: 8-504 (Zone 1 main arena)\n"
         f"- Keep movements SMALL and gradual (recommended: -20 to +20 per move)\n"
         f"- Y-axis: NEGATIVE y moves UP (toward y=8), POSITIVE y moves DOWN (toward y=504)\n"
         f"- X-axis: NEGATIVE x moves LEFT (toward x=8), POSITIVE x moves RIGHT (toward x=504)\n"
-        f"- Large movements will cause you to crash into walls!\n\n"
+        f"ATTACK:\n"
+        f"- Attack tool will auto-aim at the target and shoot your equipped weapon\n"
+        f"- Attacking happens BEFORE movement in the game tick\n"
+        f"- Choose a target from the nearby agents list above\n\n"
         f"Respond with nothing but a JSON object containing 'reasoning' (a brief 1-sentence explanation), 'action' (the action name), and 'parameters' (an object with the required parameters).\n"
-        f"Example: {{\"reasoning\": \"Moving toward the center to find loot\", \"action\": \"move\", \"parameters\": {{\"x\": 5, \"y\": -10}}}}"
+        f"Examples:\n"
+        f"- Move: {{\"reasoning\": \"Moving toward center\", \"action\": \"move\", \"parameters\": {{\"x\": 5, \"y\": -10}}}}\n"
+        f"- Attack: {{\"reasoning\": \"Attacking nearest enemy\", \"action\": \"attack\", \"parameters\": {{\"target_player_id\": \"player_2\"}}}}"
     )
 
     full_input = agent_block.system_prompt + "\n\n" + user_input

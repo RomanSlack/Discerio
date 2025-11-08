@@ -52,6 +52,15 @@ export class Player extends GameObject {
 
         this.lastInputSeq = input.seq;
 
+        // Update rotation to face mouse (needed for attacking)
+        this.rotation = Angle.betweenPoints(this.position, input.mouse);
+
+        // Handle attacking FIRST (before movement, so shots land before target moves)
+        this.attacking = input.attacking;
+        if (this.attacking) {
+            this.tryShoot(game);
+        }
+
         // Calculate movement direction
         let moveX = 0;
         let moveY = 0;
@@ -90,15 +99,6 @@ export class Player extends GameObject {
                 this.hitbox.position = newPosition;
                 game.grid.updateObject(this);
             }
-        }
-
-        // Update rotation to face mouse
-        this.rotation = Angle.betweenPoints(this.position, input.mouse);
-
-        // Handle attacking
-        this.attacking = input.attacking;
-        if (this.attacking) {
-            this.tryShoot(game);
         }
 
         // Handle actions
