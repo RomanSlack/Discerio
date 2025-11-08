@@ -294,7 +294,7 @@ async def execute_agent_block(
         f"{agent_block.user_prompt}\n\n"
         f"Current game state: {game_state_str}\n\n"
         f"Available actions:\n" + "\n".join(f"- {info}" for info in available_tools_info) + "\n\n"
-        f"Respond with a JSON object containing 'action' (the action name) and 'parameters' (an object with the required parameters).\n"
+        f"Respond with nothing but a JSON object containing 'action' (the action name) and 'parameters' (an object with the required parameters). Note the move tool takes in *relative* coordinates, and you can't move outside the box given by (-250, -250) and (250, 250).\n"
         f"Example: {{\"action\": \"move\", \"parameters\": {{\"x\": 5, \"y\": -2}}}}"
     )
 

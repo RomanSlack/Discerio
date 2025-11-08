@@ -3,6 +3,44 @@ import { GameClient } from "./game";
 const gameClient = new GameClient();
 let connected = false;
 
+// Backend API URL
+const BACKEND_URL = 'http://localhost:8001';
+
+// Call backend to register agents and start auto-stepping
+async function startBackendAgents() {
+    try {
+        console.log('Registering agents in game...');
+        const registerResponse = await fetch(`${BACKEND_URL}/register-agents-in-game`, {
+            method: 'POST',
+        });
+
+        if (!registerResponse.ok) {
+            const error = await registerResponse.json();
+            console.warn('Failed to register agents:', error);
+            return;
+        }
+
+        const registerData = await registerResponse.json();
+        console.log('Agents registered:', registerData);
+
+        console.log('Starting auto-stepping...');
+        const autoStepResponse = await fetch(`${BACKEND_URL}/start-auto-stepping?step_delay=30.0`, {
+            method: 'POST',
+        });
+
+        if (!autoStepResponse.ok) {
+            const error = await autoStepResponse.json();
+            console.warn('Failed to start auto-stepping:', error);
+            return;
+        }
+
+        const autoStepData = await autoStepResponse.json();
+        console.log('Auto-stepping started:', autoStepData);
+    } catch (error) {
+        console.warn('Backend agent system not available:', error);
+    }
+}
+
 async function init() {
     await gameClient.init();
 
@@ -22,6 +60,10 @@ async function init() {
 
         try {
             await gameClient.connect(username, false); // Not a spectator
+
+            // Start backend agent system
+            await startBackendAgents();
+
             menu.classList.remove('visible');
             connected = true;
         } catch (error) {
