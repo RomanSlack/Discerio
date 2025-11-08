@@ -1,0 +1,21 @@
+{
+  "name": "suroi-simplified-clone",
+  "version": "1.0.0",
+  "description": "Simplified battle royale game based on Suroi",
+  "private": true,
+  "workspaces": [
+    "common",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "bun run dev:server & bun run dev:client",
+    "dev:server": "cd server && bun run dev",
+    "dev:client": "cd client && bun run dev",
+    "build:client": "cd client && bun run build",
+    "start": "cd server && bun run start"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
