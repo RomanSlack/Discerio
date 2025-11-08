@@ -938,7 +938,30 @@ function LessonBuilder({ lesson, config }) {
 
       const result = await response.json();
       toast.success(`Agent "${result.agent_id}" deployed successfully! Current node: ${result.current_node}`);
-      
+
+      // For lesson 1, start auto-stepping if not already running
+      if (lessonId === 1) {
+        try {
+          const autoStepResponse = await fetch(`${BACKEND_URL}/start-auto-stepping`, {
+            method: 'POST',
+          });
+          if (autoStepResponse.ok) {
+            console.log('Auto-stepping started');
+            toast.success('Agent is now running in the game!');
+          } else {
+            const autoStepError = await autoStepResponse.json();
+            // It's OK if auto-stepping is already running
+            if (autoStepError.detail?.includes('already running')) {
+              console.log('Auto-stepping already running');
+            } else {
+              console.warn('Failed to start auto-stepping:', autoStepError);
+            }
+          }
+        } catch (error) {
+          console.warn('Could not start auto-stepping:', error);
+        }
+      }
+
       // Mark deploy task as complete
       if (config.lessonGuidelines) {
         const deployIndex = config.lessonGuidelines.findIndex(g => {

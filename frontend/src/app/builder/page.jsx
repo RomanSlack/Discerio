@@ -760,6 +760,8 @@ export default function AgentGameBuilder() {
       const payload = {
         agent_id: agentId.trim(),
         blocks: backendBlocks,
+        register_in_game: true, // Register in game immediately
+        preferred_zone: "zone1", // Default to zone 1 for builder
       };
 
       console.log('Deploying:', JSON.stringify(payload, null, 2));
@@ -779,6 +781,28 @@ export default function AgentGameBuilder() {
 
       const result = await response.json();
       toast.success(`Agent "${result.agent_id}" deployed successfully! Current node: ${result.current_node}`);
+
+      // Start auto-stepping if not already running
+      try {
+        const autoStepResponse = await fetch(`${BACKEND_URL}/start-auto-stepping`, {
+          method: 'POST',
+        });
+        if (autoStepResponse.ok) {
+          console.log('Auto-stepping started');
+          toast.success('Agent is now running in the game!');
+        } else {
+          const autoStepError = await autoStepResponse.json();
+          // It's OK if auto-stepping is already running
+          if (autoStepError.detail?.includes('already running')) {
+            console.log('Auto-stepping already running');
+            toast.success('Agent joined the game!');
+          } else {
+            console.warn('Failed to start auto-stepping:', autoStepError);
+          }
+        }
+      } catch (error) {
+        console.warn('Could not start auto-stepping:', error);
+      }
     } catch (error) {
       console.error('Deployment error:', error);
       toast.error(`Deployment failed: ${error.message}`);
