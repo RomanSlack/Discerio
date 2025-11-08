@@ -28,8 +28,10 @@ export class GameClient {
     private playerId: number | null = null;
     private isSpectator: boolean = false;
     private playerSprites: Map<number, RenderObject> = new Map();
-    private bulletGraphics: Map<number, PIXI.Graphics> = new Map();
+    private bulletSprites: Map<number, PIXI.Sprite> = new Map();
+    private bulletCircles: Map<number, PIXI.Graphics> = new Map(); // White circles at bullet tip
     private bulletData: Map<number, BulletData> = new Map();
+    private bulletSpawnTimes: Map<number, number> = new Map(); // Track when bullets spawn for trail animation
     private obstacleSprites: Map<number, RenderObject> = new Map();
     private lootSprites: Map<number, RenderObject> = new Map();
 
@@ -228,21 +230,49 @@ export class GameClient {
 
         // Update bullets
         const currentBulletIds = new Set(packet.bullets.map(b => b.id));
-        for (const [id, graphic] of this.bulletGraphics.entries()) {
+        for (const [id, sprite] of this.bulletSprites.entries()) {
             if (!currentBulletIds.has(id)) {
-                this.app.stage.removeChild(graphic);
-                graphic.destroy();
-                this.bulletGraphics.delete(id);
+                this.app.stage.removeChild(sprite);
+                sprite.destroy();
+                this.bulletSprites.delete(id);
+
+                // Also remove bullet circle
+                const circle = this.bulletCircles.get(id);
+                if (circle) {
+                    this.app.stage.removeChild(circle);
+                    circle.destroy();
+                    this.bulletCircles.delete(id);
+                }
+
                 this.bulletData.delete(id);
+                this.bulletSpawnTimes.delete(id);
             }
         }
 
         for (const bulletData of packet.bullets) {
-            if (!this.bulletGraphics.has(bulletData.id)) {
-                const graphic = new PIXI.Graphics();
-                graphic.zIndex = 25; // Above players
-                this.app.stage.addChild(graphic);
-                this.bulletGraphics.set(bulletData.id, graphic);
+            if (!this.bulletSprites.has(bulletData.id)) {
+                // Create new bullet sprite with trail texture
+                const trailTexture = this.assetManager.getTexture('bullet_trail');
+                const sprite = new PIXI.Sprite(trailTexture || PIXI.Texture.EMPTY);
+
+                // Configure sprite
+                sprite.anchor.set(1, 0.5); // Anchor at RIGHT-center (trail extends behind bullet)
+                sprite.rotation = bulletData.rotation;
+                sprite.zIndex = 25; // Above players
+                sprite.tint = 0xffdd44; // Yellow-orange color
+
+                this.app.stage.addChild(sprite);
+                this.bulletSprites.set(bulletData.id, sprite);
+                this.bulletSpawnTimes.set(bulletData.id, Date.now());
+
+                // Create white circle at bullet tip
+                const circle = new PIXI.Graphics();
+                circle.circle(0, 0, 1); // Small circle, 1 unit radius
+                circle.fill({ color: 0xffffff, alpha: 0.9 });
+                circle.zIndex = 26; // Above trail
+
+                this.app.stage.addChild(circle);
+                this.bulletCircles.set(bulletData.id, circle);
             }
             this.bulletData.set(bulletData.id, bulletData);
         }
@@ -382,32 +412,50 @@ export class GameClient {
             }
         }
 
-        // Render bullets with improved tracers
-        for (const [id, graphic] of this.bulletGraphics.entries()) {
+        // Render bullets with sprite-based trails
+        for (const [id, sprite] of this.bulletSprites.entries()) {
             const bullet = this.bulletData.get(id);
             if (!bullet) continue;
 
-            const screenStart = this.camera.worldToScreen(Vec(bullet.x, bullet.y));
-            const bulletEnd = Vec.add(Vec(bullet.x, bullet.y), Vec.fromPolar(bullet.rotation, 8));
-            const screenEnd = this.camera.worldToScreen(bulletEnd);
+            const spawnTime = this.bulletSpawnTimes.get(id) || Date.now();
+            const age = Date.now() - spawnTime;
 
-            graphic.clear();
+            // Position sprite at bullet location
+            const screenPos = this.camera.worldToScreen(Vec(bullet.x, bullet.y));
+            sprite.position.set(screenPos.x, screenPos.y);
+            sprite.rotation = bullet.rotation;
 
-            // Draw bullet trail with glow effect
-            // Outer glow
-            graphic.moveTo(screenStart.x, screenStart.y);
-            graphic.lineTo(screenEnd.x, screenEnd.y);
-            graphic.stroke({ color: 0xffaa00, width: 4 * this.camera.zoom, alpha: 0.3 });
+            // Dynamic trail length: grows over first 150ms for smooth appearance
+            const maxTrailLength = 18; // Maximum trail length in world units (smaller)
+            const growthDuration = 150; // ms to reach full length
+            const trailLengthFactor = Math.min(age / growthDuration, 1);
+            const trailLength = maxTrailLength * trailLengthFactor;
 
-            // Middle trail
-            graphic.moveTo(screenStart.x, screenStart.y);
-            graphic.lineTo(screenEnd.x, screenEnd.y);
-            graphic.stroke({ color: 0xffdd44, width: 2.5 * this.camera.zoom, alpha: 0.7 });
+            // Scale the sprite with tapering effect
+            // Width of sprite in world coordinates, then convert to screen
+            // Start from nearly 0 and grow out
+            const baseWidth = Math.max(trailLength * this.camera.zoom / 132.292, 0.01); // 132.292 is the SVG width, minimum 0.01 to avoid 0
+            const baseHeight = 0.5 * this.camera.zoom; // Smaller height (was 0.8)
 
-            // Inner core
-            graphic.moveTo(screenStart.x, screenStart.y);
-            graphic.lineTo(screenEnd.x, screenEnd.y);
-            graphic.stroke({ color: 0xffff88, width: 1.5 * this.camera.zoom });
+            // Taper: gradually reduce height as trail gets longer (like bullet momentum)
+            const taperFactor = 0.7 + (0.3 * (1 - trailLengthFactor)); // Starts thick, gets thinner
+
+            sprite.scale.set(
+                baseWidth,
+                baseHeight * taperFactor
+            );
+
+            // Fade in very quickly just to avoid pop-in
+            sprite.alpha = Math.min(age / 20, 1);
+
+            // Update white circle position at bullet tip (same as bullet position now)
+            const circle = this.bulletCircles.get(id);
+            if (circle) {
+                // Circle is at the bullet position (front), trail extends behind
+                circle.position.set(screenPos.x, screenPos.y);
+                circle.scale.set(this.camera.zoom);
+                circle.alpha = 1; // Always fully visible
+            }
         }
 
         // Update lighting system (renders sun-based shadows) - DISABLED FOR DEBUG

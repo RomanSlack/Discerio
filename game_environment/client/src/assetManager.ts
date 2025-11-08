@@ -42,7 +42,10 @@ export class AssetManager {
             // Weapons (held versions)
             { name: 'pistol', url: '/assets/weapons/cz75a.svg' },
             { name: 'rifle', url: '/assets/weapons/ak47.svg' },
-            { name: 'shotgun', url: '/assets/weapons/hp18.svg' }
+            { name: 'shotgun', url: '/assets/weapons/hp18.svg' },
+
+            // Bullet trails
+            { name: 'bullet_trail', url: '/assets/trails/base_trail.svg' }
         ];
 
         for (const asset of assets) {
