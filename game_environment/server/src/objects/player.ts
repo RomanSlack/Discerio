@@ -302,20 +302,20 @@ export class Player extends GameObject {
 
         this.health -= amount;
 
-        // Lose XP when hit (20% of damage as XP loss, min 5 XP)
-        const xpLoss = Math.max(5, Math.floor(amount * 0.2));
+        // Lose XP when hit (10% of damage as XP loss, min 2 XP)
+        const xpLoss = Math.max(2, Math.floor(amount * 0.1));
         this.xp = Math.max(0, this.xp - xpLoss);
 
-        // Attacker gains XP (10 XP per hit)
+        // Attacker gains XP (3 XP per hit - reduced for balance)
         if (source && 'xp' in source && source !== this) {
-            source.xp += 10;
+            source.xp += 3;
         }
 
         if (this.health <= 0) {
             this.health = 0;
-            // On death, attacker gets kill bonus XP (50 XP)
+            // On death, attacker gets kill bonus XP (25 XP - reduced for balance)
             if (source && 'xp' in source && source !== this) {
-                source.xp += 50;
+                source.xp += 25;
             }
             this.die();
         }
