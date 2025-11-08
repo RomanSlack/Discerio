@@ -1,368 +1,276 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react';
-import Block from '../components/Block';
-import Connections from '../components/Connections';
-import Popup from '../components/Popup';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useTheme } from '../contexts/ThemeContext';
 
-/**
- * Main App Component
- * Manages the entire agent builder canvas with nodes, connections, and editing capabilities
- */
 export default function Home() {
-  // State management for nodes (blocks on canvas)
-  const [nodes, setNodes] = useState([
-    { id: 1, label: 'Start', description: 'Starting point', x: 100, y: 100 },
-    { id: 2, label: 'Attack', description: 'Attack action', x: 300, y: 200 },
-    { id: 3, label: 'Defend', description: 'Defense action', x: 500, y: 100 },
-    { id: 4, label: 'Speak', description: 'Communication action', x: 300, y: 300 },
-  ]);
+  const theme = useTheme();
+  const [mounted, setMounted] = useState(false);
 
-  // State management for connections between nodes
-  const [connections, setConnections] = useState([
-    { from: 1, to: 2 },
-    { from: 2, to: 4 },
-  ]);
-
-  // State for editing popup
-  const [editingNode, setEditingNode] = useState(null);
-
-  // State for connection mode
-  const [connectionMode, setConnectionMode] = useState(false);
-  const [selectedSourceNode, setSelectedSourceNode] = useState(null);
-  const [tempConnectionPos, setTempConnectionPos] = useState(null);
-
-  // Ref to track dragging state
-  const draggedNodeRef = useRef(null);
-  const canvasRef = useRef(null);
-
-  // Counter for generating unique IDs
-  const nextIdRef = useRef(5);
-
-  /**
-   * Handle node position update during drag
-   */
-  const handleNodeDrag = useCallback((id, x, y) => {
-    setNodes(prevNodes =>
-      prevNodes.map(node =>
-        node.id === id ? { ...node, x, y } : node
-      )
-    );
-    draggedNodeRef.current = { id, x, y };
+  useEffect(() => {
+    setMounted(true);
   }, []);
-
-  /**
-   * Handle node drag end - check for nearby nodes and create connections
-   */
-  const handleNodeDragEnd = useCallback((id, x, y) => {
-    const draggedNode = nodes.find(n => n.id === id);
-    if (!draggedNode) return;
-
-    // Find nearby nodes (within 80px) to auto-connect
-    const CONNECTION_THRESHOLD = 80;
-    nodes.forEach(node => {
-      if (node.id !== id) {
-        const distance = Math.sqrt(
-          Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2)
-        );
-
-        if (distance < CONNECTION_THRESHOLD) {
-          // Check if connection doesn't already exist
-          const connectionExists = connections.some(
-            conn => (conn.from === id && conn.to === node.id) ||
-                    (conn.from === node.id && conn.to === id)
-          );
-
-          if (!connectionExists) {
-            setConnections(prev => [...prev, { from: id, to: node.id }]);
-          }
-        }
-      }
-    });
-
-    draggedNodeRef.current = null;
-  }, [nodes, connections]);
-
-  /**
-   * Handle opening edit popup for a node
-   */
-  const handleNodeClick = useCallback((node) => {
-    // If in connection mode, handle connection logic
-    if (connectionMode) {
-      if (!selectedSourceNode) {
-        // First click - select source node
-        setSelectedSourceNode(node);
-      } else if (selectedSourceNode.id === node.id) {
-        // Clicking same node - cancel
-        setSelectedSourceNode(null);
-        setTempConnectionPos(null);
-      } else {
-        // Second click - create connection
-        const connectionExists = connections.some(
-          conn => (conn.from === selectedSourceNode.id && conn.to === node.id) ||
-                  (conn.from === node.id && conn.to === selectedSourceNode.id)
-        );
-
-        if (!connectionExists) {
-          setConnections(prev => [...prev, { from: selectedSourceNode.id, to: node.id }]);
-        }
-
-        // Reset selection
-        setSelectedSourceNode(null);
-        setTempConnectionPos(null);
-      }
-    } else {
-      // Normal mode - open edit popup
-      setEditingNode(node);
-    }
-  }, [connectionMode, selectedSourceNode, connections]);
-
-  /**
-   * Handle saving edited node data
-   */
-  const handleNodeEdit = useCallback((id, updates) => {
-    setNodes(prevNodes =>
-      prevNodes.map(node =>
-        node.id === id ? { ...node, ...updates } : node
-      )
-    );
-    setEditingNode(null);
-  }, []);
-
-  /**
-   * Handle deleting a node and its connections
-   */
-  const handleNodeDelete = useCallback((id) => {
-    setNodes(prevNodes => prevNodes.filter(node => node.id !== id));
-    setConnections(prevConnections =>
-      prevConnections.filter(conn => conn.from !== id && conn.to !== id)
-    );
-    setEditingNode(null);
-  }, []);
-
-  /**
-   * Handle deleting a connection
-   */
-  const handleConnectionDelete = useCallback((from, to) => {
-    setConnections(prevConnections =>
-      prevConnections.filter(conn => !(conn.from === from && conn.to === to))
-    );
-  }, []);
-
-  /**
-   * Add a new node to the canvas
-   */
-  const addNode = useCallback((type) => {
-    const newNode = {
-      id: nextIdRef.current++,
-      label: type,
-      description: `${type} action`,
-      x: Math.random() * 400 + 100,
-      y: Math.random() * 300 + 100,
-    };
-    setNodes(prev => [...prev, newNode]);
-  }, []);
-
-  /**
-   * Export the current agent logic as JSON
-   */
-  const exportJSON = useCallback(() => {
-    const data = {
-      nodes: nodes.map(({ id, label, description, x, y }) => ({
-        id,
-        label,
-        description,
-        position: { x, y }
-      })),
-      connections: connections.map(({ from, to }) => ({ from, to }))
-    };
-
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'agent-logic.json';
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [nodes, connections]);
-
-  /**
-   * Clear the entire canvas
-   */
-  const clearCanvas = useCallback(() => {
-    if (window.confirm('Are you sure you want to clear the canvas?')) {
-      setNodes([]);
-      setConnections([]);
-    }
-  }, []);
-
-  /**
-   * Toggle connection mode
-   */
-  const toggleConnectionMode = useCallback(() => {
-    setConnectionMode(prev => !prev);
-    setSelectedSourceNode(null);
-    setTempConnectionPos(null);
-  }, []);
-
-  /**
-   * Handle mouse move for temporary connection line
-   */
-  const handleCanvasMouseMove = useCallback((e) => {
-    if (connectionMode && selectedSourceNode && canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      setTempConnectionPos({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      });
-    }
-  }, [connectionMode, selectedSourceNode]);
-
-  /**
-   * Handle canvas click to cancel connection mode
-   */
-  const handleCanvasClick = useCallback((e) => {
-    if (connectionMode && e.target === canvasRef.current) {
-      setSelectedSourceNode(null);
-      setTempConnectionPos(null);
-    }
-  }, [connectionMode]);
 
   return (
-    <div className="w-full min-h-screen flex flex-col bg-gray-50">
-      {/* Toolbar */}
-      <div className="bg-white shadow-md px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-800">GPT Agent Builder</h1>
-          <div className="flex gap-2">
-            <button
-              onClick={() => addNode('Start')}
-              className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-            >
-              + Start
-            </button>
-            <button
-              onClick={() => addNode('Attack')}
-              className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-            >
-              + Attack
-            </button>
-            <button
-              onClick={() => addNode('Defend')}
-              className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-            >
-              + Defend
-            </button>
-            <button
-              onClick={() => addNode('Speak')}
-              className="px-3 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition"
-            >
-              + Speak
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={toggleConnectionMode}
-            className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${
-              connectionMode
-                ? 'bg-orange-500 text-white hover:bg-orange-600 ring-2 ring-orange-300'
-                : 'bg-yellow-500 text-white hover:bg-yellow-600'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-            {connectionMode ? 'Exit Connect Mode' : 'Connect Mode'}
-          </button>
-          <button
-            onClick={exportJSON}
-            className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export JSON
-          </button>
-          <button
-            onClick={clearCanvas}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
-          >
-            Clear Canvas
-          </button>
-        </div>
+    <div className={`min-h-screen ${theme.bg.primary} overflow-hidden relative`}>
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden">
+        {/* Gradient mesh */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            background: theme.isDark
+              ? 'radial-gradient(circle at 20% 50%, rgba(255, 56, 56, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.15) 0%, transparent 50%), radial-gradient(circle at 40% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)'
+              : 'radial-gradient(circle at 20% 50%, rgba(239, 68, 68, 0.08) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 50%), radial-gradient(circle at 40% 20%, rgba(147, 51, 234, 0.06) 0%, transparent 50%)'
+          }}
+        />
+
+        {/* Animated grid */}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: theme.isDark
+              ? 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)'
+              : 'linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+            animation: 'gridMove 20s linear infinite',
+          }}
+        />
+
+        {/* Floating orbs */}
+        <div className={`absolute w-96 h-96 rounded-full blur-3xl ${mounted ? 'animate-float' : ''}`}
+          style={{
+            top: '10%',
+            left: '10%',
+            background: theme.isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.06)',
+            animationDelay: '0s',
+            animationDuration: '15s'
+          }}
+        />
+        <div className={`absolute w-96 h-96 rounded-full blur-3xl ${mounted ? 'animate-float' : ''}`}
+          style={{
+            top: '60%',
+            right: '15%',
+            background: theme.isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.06)',
+            animationDelay: '5s',
+            animationDuration: '18s'
+          }}
+        />
+        <div className={`absolute w-80 h-80 rounded-full blur-3xl ${mounted ? 'animate-float' : ''}`}
+          style={{
+            bottom: '10%',
+            left: '50%',
+            background: theme.isDark ? 'rgba(168, 85, 247, 0.08)' : 'rgba(168, 85, 247, 0.05)',
+            animationDelay: '10s',
+            animationDuration: '20s'
+          }}
+        />
       </div>
 
-      {/* Canvas */}
-      <div
-        ref={canvasRef}
-        className={`canvas flex-1 relative ${connectionMode ? 'cursor-crosshair' : ''}`}
-        onMouseMove={handleCanvasMouseMove}
-        onClick={handleCanvasClick}
-      >
-        {/* Connection Mode Banner */}
-        {connectionMode && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
-            <div className="bg-orange-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="font-semibold">
-                {selectedSourceNode
-                  ? `Click target node to connect from "${selectedSourceNode.label}"`
-                  : 'Click a node to start connecting'}
-              </span>
+      {/* Main Content */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        {/* Hero Section */}
+        <div className={`text-center mb-20 ${mounted ? 'animate-fadeInUp' : 'opacity-0'}`}>
+          <h1
+            className={`text-6xl md:text-8xl font-black mb-6 ${theme.text.primary} tracking-tight`}
+            style={{
+              fontFamily: '"JetBrains Mono", "Courier New", monospace',
+              textShadow: theme.isDark ? '0 0 40px rgba(255, 255, 255, 0.1)' : 'none'
+            }}
+          >
+            Discer<span className="text-red-500">.</span>io
+          </h1>
+
+          <p
+            className={`text-2xl md:text-3xl mb-4 font-bold ${theme.text.primary}`}
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              animationDelay: '0.2s'
+            }}
+          >
+            Learn AI Agents Through Play
+          </p>
+
+          <p
+            className={`text-lg md:text-xl max-w-3xl mx-auto ${theme.text.secondary} leading-relaxed`}
+            style={{
+              fontFamily: '"IBM Plex Sans", sans-serif',
+              animationDelay: '0.4s'
+            }}
+          >
+            Think Scratch, but for agentic AI systems. Design, orchestrate, and deploy
+            intelligent agents using drag-and-drop blocks. No code required.
+          </p>
+        </div>
+
+        {/* Feature Cards */}
+        <div className={`grid md:grid-cols-3 gap-8 mb-16 ${mounted ? 'animate-fadeInUp' : 'opacity-0'}`}
+          style={{ animationDelay: '0.6s' }}
+        >
+          {/* Card 1: Learn */}
+          <div className={`group relative ${theme.bg.secondary} backdrop-blur-sm border ${theme.border.primary} rounded-2xl p-8 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}
+            style={{
+              boxShadow: theme.isDark ? '0 10px 40px rgba(0, 0, 0, 0.3)' : '0 10px 40px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="relative">
+              <div className="w-16 h-16 mb-6 rounded-xl bg-red-500/10 flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <h3 className={`text-2xl font-bold mb-3 ${theme.text.primary}`} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                Guided Lessons
+              </h3>
+              <p className={`${theme.text.secondary} leading-relaxed`}>
+                Master AI agent concepts through interactive tutorials. From basic building blocks to complex multi-agent systems.
+              </p>
             </div>
           </div>
-        )}
 
-        {/* SVG Layer for connections */}
-        <Connections
-          nodes={nodes}
-          connections={connections}
-          onConnectionDelete={handleConnectionDelete}
-          tempConnection={
-            connectionMode && selectedSourceNode && tempConnectionPos
-              ? { sourceNode: selectedSourceNode, targetPos: tempConnectionPos }
-              : null
+          {/* Card 2: Build */}
+          <div className={`group relative ${theme.bg.secondary} backdrop-blur-sm border ${theme.border.primary} rounded-2xl p-8 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}
+            style={{
+              boxShadow: theme.isDark ? '0 10px 40px rgba(0, 0, 0, 0.3)' : '0 10px 40px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="relative">
+              <div className="w-16 h-16 mb-6 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </div>
+              <h3 className={`text-2xl font-bold mb-3 ${theme.text.primary}`} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                Visual Builder
+              </h3>
+              <p className={`${theme.text.secondary} leading-relaxed`}>
+                Design workflows with intuitive drag-and-drop. Connect reasoning steps, tools, and decision nodes in a sandbox environment.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Play */}
+          <div className={`group relative ${theme.bg.secondary} backdrop-blur-sm border ${theme.border.primary} rounded-2xl p-8 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}
+            style={{
+              boxShadow: theme.isDark ? '0 10px 40px rgba(0, 0, 0, 0.3)' : '0 10px 40px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="relative">
+              <div className="w-16 h-16 mb-6 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                <svg className="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className={`text-2xl font-bold mb-3 ${theme.text.primary}`} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                MMO Sandbox
+              </h3>
+              <p className={`${theme.text.secondary} leading-relaxed`}>
+                Deploy agents in a live multiplayer game. Watch them interact, compete, and evolve in real-time battles.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* CTA Section */}
+        <div className={`text-center ${mounted ? 'animate-fadeInUp' : 'opacity-0'}`}
+          style={{ animationDelay: '0.8s' }}
+        >
+          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+            <Link
+              href="/builder"
+              className="group relative px-10 py-5 bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-lg rounded-xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 overflow-hidden"
+              style={{ fontFamily: '"JetBrains Mono", monospace' }}
+            >
+              <span className="relative z-10 flex items-center gap-3">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Start Building
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-400 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+            </Link>
+
+            <Link
+              href="/lessons"
+              className={`group px-10 py-5 ${theme.bg.secondary} ${theme.text.primary} font-bold text-lg rounded-xl border-2 ${theme.border.primary} hover:border-blue-500 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300`}
+              style={{ fontFamily: '"JetBrains Mono", monospace' }}
+            >
+              <span className="flex items-center gap-3">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Explore Lessons
+              </span>
+            </Link>
+          </div>
+
+          <p className={`mt-8 ${theme.text.tertiary} text-sm`}>
+            No installation required • Works in your browser • Free to start
+          </p>
+        </div>
+
+        {/* Bottom tagline */}
+        <div className={`mt-24 text-center ${mounted ? 'animate-fadeInUp' : 'opacity-0'}`}
+          style={{ animationDelay: '1s' }}
+        >
+          <p className={`text-xl ${theme.text.secondary} font-medium`} style={{ fontFamily: '"IBM Plex Sans", sans-serif' }}>
+            Bridge the gap between curiosity and capability
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" style={{ animationDelay: '0s' }} />
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Animations */}
+      <style jsx>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
           }
-        />
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
 
-        {/* Blocks Layer */}
-        {nodes.map(node => (
-          <Block
-            key={node.id}
-            node={node}
-            onDrag={handleNodeDrag}
-            onDragEnd={handleNodeDragEnd}
-            onClick={handleNodeClick}
-            isSelected={connectionMode && selectedSourceNode?.id === node.id}
-            isConnectionMode={connectionMode}
-          />
-        ))}
-      </div>
+        @keyframes float {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+          }
+          33% {
+            transform: translate(30px, -30px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+        }
 
-      {/* Edit Popup */}
-      {editingNode && (
-        <Popup
-          node={editingNode}
-          onSave={handleNodeEdit}
-          onDelete={handleNodeDelete}
-          onClose={() => setEditingNode(null)}
-        />
-      )}
+        @keyframes gridMove {
+          0% {
+            background-position: 0 0;
+          }
+          100% {
+            background-position: 60px 60px;
+          }
+        }
 
-      {/* Info Footer */}
-      <div className="bg-white border-t px-6 py-2 text-sm text-gray-600">
-        <span className="font-semibold">{nodes.length}</span> nodes,
-        <span className="font-semibold ml-1">{connections.length}</span> connections
-        <span className="ml-4 text-gray-500">
-          {connectionMode
-            ? '• Connection Mode: Click nodes to connect them'
-            : '• Use Connect Mode for easy linking • Drag blocks near each other to auto-connect • Double-click to edit'}
-        </span>
-      </div>
+        .animate-fadeInUp {
+          animation: fadeInUp 0.8s ease-out forwards;
+        }
+
+        .animate-float {
+          animation: float var(--duration, 15s) ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
