@@ -32,7 +32,7 @@ MAX_ACTION_HISTORY = 5  # Maximum number of past actions to include in context
 class ToolConnection(BaseModel):
     """Connection from an Agent block to a Tool block"""
     tool_id: str = Field(..., description="ID of the tool block to connect to")
-    tool_name: Literal["move", "attack", "collect", "plan"] = Field(
+    tool_name: Literal["move", "attack", "collect", "plan", "search"] = Field(
         ..., description="Name of the tool (must match the tool block's tool_type)"
     )
 
@@ -71,7 +71,7 @@ class ToolBlock(BaseModel):
     """Tool block - executes a game action"""
     id: str = Field(..., description="Unique identifier for this block")
     type: Literal["tool"] = "tool"
-    tool_type: Literal["move", "attack", "collect", "plan"] = Field(
+    tool_type: Literal["move", "attack", "collect", "plan", "search"] = Field(
         ..., description="Type of tool action"
     )
     parameters: Dict[str, str] = Field(
@@ -167,7 +167,7 @@ class NextStepRequest(BaseModel):
 
 class ToolAction(BaseModel):
     """Response model for a tool action"""
-    tool_type: Literal["move", "attack", "collect", "plan"]
+    tool_type: Literal["move", "attack", "collect", "plan", "search"]
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
         description="Parameters for the tool (e.g., direction for move, target for attack)"
@@ -321,8 +321,10 @@ async def execute_agent_block(
     available_tools = [conn.tool_name for conn in agent_block.tool_connections]
     logger.info(f"Available tools: {', '.join(available_tools)}")
 
-    # Check if plan tool is available
+    # Check if MCP tools are available (plan or search)
     has_plan_tool = "plan" in available_tools
+    has_search_tool = "search" in available_tools
+    has_mcp_tools = has_plan_tool or has_search_tool
 
     # Build attack-specific context if attack tool is available
     attack_context = ""
@@ -363,16 +365,25 @@ async def execute_agent_block(
     full_input = agent_block.system_prompt + "\n\n" + user_input
     logger.info(f"LLM Input:\n{full_input}")
 
-    # Call Dedalus with MCP server access if plan tool is available
+    # Build MCP servers list based on available tools
+    mcp_servers = []
+    if has_plan_tool:
+        mcp_servers.append("raptors65/hack-princeton-mcp")
+    if has_search_tool:
+        mcp_servers.append("tsion/brave-search-mcp")
+
+    # Call Dedalus with MCP server access if MCP tools are available
     logger.info(f"Calling LLM with model: {agent_block.model} (timeout: {LLM_TIMEOUT}s)")
+    if mcp_servers:
+        logger.info(f"MCP tools detected, including MCP servers: {mcp_servers}")
+
     try:
-        if has_plan_tool:
-            logger.info("Plan tool detected, including MCP server access")
+        if mcp_servers:
             response = await asyncio.wait_for(
                 dedalus_runner.run(
                     input=full_input,
                     model=agent_block.model,
-                    mcp_servers=["raptors65/hack-princeton-mcp"],
+                    mcp_servers=mcp_servers,
                 ),
                 timeout=LLM_TIMEOUT
             )
@@ -972,6 +983,10 @@ async def next_step_for_agents(request: NextStepRequest) -> NextStepResponse:
     if tool_choice == "plan" and "plan" in parameters:
         agent_state.current_plan = parameters["plan"]
         logger.info(f"Stored plan for agent {agent_id}: {agent_state.current_plan}")
+
+    # If the tool is "search", log the search query and results will come from MCP
+    if tool_choice == "search" and "query" in parameters:
+        logger.info(f"Agent {agent_id} searching for: {parameters['query']}")
 
     # Store this action in the agent's action history
     action_record = {
