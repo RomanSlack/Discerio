@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 /**
  * LessonCard Component
@@ -9,12 +8,10 @@ import { useRouter } from 'next/navigation';
  */
 export default function LessonCard({ lesson, progress, onProgressUpdate, allLessons }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const router = useRouter();
 
   // Check if prerequisites are met
-  const prerequisitesMet = lesson.prerequisites.every(prereqId => {
-    const prereqProgress = allLessons.find(l => l.id === prereqId)?.id;
-    return prereqProgress && (progress[prereqId] === 'completed' || progress[prereqId] === 'in-progress');
+  const prerequisitesMet = lesson.prerequisites.length === 0 || lesson.prerequisites.every(prereqId => {
+    return progress[prereqId] === 'completed' || progress[prereqId] === 'in-progress';
   });
 
   // Get progress badge color
@@ -153,12 +150,12 @@ export default function LessonCard({ lesson, progress, onProgressUpdate, allLess
           {prerequisitesMet && (
             <div className="flex gap-1">
               <button
-                onClick={() => router.push('/builder')}
+                onClick={() => window.open('/builder', '_blank')}
                 className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-1"
-                title="Open Agent Builder"
+                title="Open Agent Builder in new tab"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
                 Try It
               </button>

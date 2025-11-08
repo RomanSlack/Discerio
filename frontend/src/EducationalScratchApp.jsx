@@ -1,10 +1,14 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
 import Popup from './components/Popup';
 import HintSystem from './components/HintSystem';
 import InfoCard from './components/InfoCard';
 import ChallengePanel from './components/ChallengePanel';
+import LessonContent from './components/LessonContent';
+import SimulationSandbox from './components/SimulationSandbox';
+import ChallengeSelector from './components/ChallengeSelector';
+import { challenges } from './data/challenges';
 
 /**
  * EducationalScratchApp - Full Educational Experience
@@ -20,18 +24,6 @@ function EducationalScratchApp() {
   // State for editing popup
   const [editingNode, setEditingNode] = useState(null);
 
-  // State for agent position in sandbox
-  const [agentPos, setAgentPos] = useState({ x: 20, y: 50 });
-
-  // State for obstacles in sandbox
-  const [obstacles, setObstacles] = useState([
-    { x: 40, y: 50, width: 10, height: 20 },
-    { x: 65, y: 30, width: 10, height: 30 }
-  ]);
-
-  // State for goal position
-  const [goalPos] = useState({ x: 85, y: 50 });
-
   // State for debug trail with enhanced educational messages
   const [debugTrail, setDebugTrail] = useState([
     {
@@ -46,10 +38,23 @@ function EducationalScratchApp() {
   const [lastAction, setLastAction] = useState(null);
 
   // State for current challenge
-  const [currentChallenge, setCurrentChallenge] = useState(null);
+  const [currentChallenge, setCurrentChallenge] = useState(challenges[0]); // Start with first challenge
 
   // State for current lesson focus
   const [lessonFocus, setLessonFocus] = useState('perception');
+
+  // State for challenge selector
+  const [showChallengeSelector, setShowChallengeSelector] = useState(false);
+
+  // State for right panel view toggle ('debug' or 'lesson')
+  const [rightPanelView, setRightPanelView] = useState('debug');
+
+  // State for right panel collapsed/expanded
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+
+  // State for right panel width (resizable)
+  const [panelWidth, setPanelWidth] = useState(384); // 384px = w-96
+  const [isResizing, setIsResizing] = useState(false);
 
   // Counter for generating unique IDs
   const nextIdRef = useRef(1);
@@ -153,154 +158,6 @@ function EducationalScratchApp() {
     );
   }, []);
 
-  /**
-   * Check if agent collides with obstacles
-   */
-  const checkCollision = useCallback((x, y) => {
-    return obstacles.some(obs =>
-      x >= obs.x && x <= obs.x + obs.width &&
-      y >= obs.y && y <= obs.y + obs.height
-    );
-  }, [obstacles]);
-
-  /**
-   * Check if agent reached goal
-   */
-  const checkGoalReached = useCallback((x, y) => {
-    const distance = Math.sqrt(
-      Math.pow(x - goalPos.x, 2) + Math.pow(y - goalPos.y, 2)
-    );
-    return distance < 5;
-  }, [goalPos]);
-
-  /**
-   * Run agent simulation with educational feedback
-   */
-  const runAgent = useCallback(() => {
-    if (nodes.length === 0) {
-      addDebugMessage('error', 'No blocks to execute. Start by dragging blocks from the left!', 'error');
-      setLastAction({ type: 'error', message: 'no_blocks' });
-      return;
-    }
-
-    addDebugMessage('info', '🚀 Starting agent execution...', 'start');
-    setAgentPos({ x: 20, y: 50 }); // Reset position
-
-    let currentX = 20;
-    let currentY = 50;
-    let hasReflected = false;
-
-    // Execute blocks sequentially with educational commentary
-    nodes.forEach((node, index) => {
-      setTimeout(() => {
-        const action = node.label;
-
-        switch(action) {
-          case 'SENSE':
-            const obstacleAhead = checkCollision(currentX + 15, currentY);
-            addDebugMessage(
-              'sense',
-              `👁️ SENSING: ${obstacleAhead ? 'Obstacle detected ahead!' : 'Path looks clear'}`,
-              'sense'
-            );
-            addDebugMessage(
-              'sense',
-              `📊 Input: Environment data → Agent can see ${obstacleAhead ? 'blocked' : 'open'} path`,
-              'sense'
-            );
-            break;
-
-          case 'PLAN':
-            const hasSense = nodes.some(n => n.label === 'SENSE');
-            if (hasSense) {
-              addDebugMessage(
-                'plan',
-                '🧠 PLANNING: Analyzing sensor data... Calculating best path around obstacles',
-                'plan'
-              );
-              addDebugMessage(
-                'plan',
-                '💡 Decision Logic: Move forward cautiously, adjust if obstacle detected',
-                'plan'
-              );
-            } else {
-              addDebugMessage(
-                'warning',
-                '⚠️ PLANNING: No sensor data available. Planning without information!',
-                'plan'
-              );
-            }
-            break;
-
-          case 'ACT':
-            const willCollide = checkCollision(currentX + 20, currentY);
-
-            if (willCollide) {
-              addDebugMessage('error', '❌ ACTION: Collision! Agent hit an obstacle', 'act');
-              addDebugMessage('error', '💥 No SENSE block = blind movement', 'act');
-              setLastAction({ type: 'collision' });
-            } else {
-              currentX += 20;
-              currentY += Math.random() * 10 - 5; // Slight variation
-              setAgentPos({ x: currentX, y: currentY });
-
-              addDebugMessage('act', '⚡ ACTION: Moving forward...', 'act');
-              addDebugMessage('act', `📍 New position: (${currentX.toFixed(0)}, ${currentY.toFixed(0)})`, 'act');
-
-              if (checkGoalReached(currentX, currentY)) {
-                addDebugMessage('success', '🎯 Goal reached! Mission accomplished!', 'success');
-                setLastAction({ type: 'success' });
-              }
-            }
-            break;
-
-          case 'REFLECT':
-            hasReflected = true;
-            const success = checkGoalReached(currentX, currentY);
-            if (success) {
-              addDebugMessage(
-                'reflect',
-                '💭 REFLECTING: Success! Storing this strategy in memory for future use',
-                'reflect'
-              );
-              addDebugMessage(
-                'reflect',
-                '🎓 Learning: "Sense → Plan → Act" pattern works well',
-                'reflect'
-              );
-            } else {
-              addDebugMessage(
-                'reflect',
-                '💭 REFLECTING: Analyzing what went wrong... Learning from mistakes',
-                'reflect'
-              );
-              addDebugMessage(
-                'reflect',
-                '📝 Memory Update: Need better obstacle detection next time',
-                'reflect'
-              );
-            }
-            break;
-
-          default:
-            addDebugMessage('info', `Executing: ${action}`, 'execute');
-        }
-
-        // Final summary
-        if (index === nodes.length - 1) {
-          setTimeout(() => {
-            if (!hasReflected) {
-              addDebugMessage(
-                'info',
-                '💡 Tip: Add a REFLECT block to help your agent learn and improve!',
-                'tip'
-              );
-            }
-          }, 500);
-        }
-      }, index * 1500); // Slower for educational clarity
-    });
-  }, [nodes, addDebugMessage, checkCollision, checkGoalReached]);
 
   /**
    * Export agent logic as JSON
@@ -340,6 +197,45 @@ function EducationalScratchApp() {
     setAgentPos({ x: 20, y: 50 });
   }, [addDebugMessage]);
 
+  /**
+   * Handle panel resize start
+   */
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  /**
+   * Handle panel resize move
+   */
+  const handleResizeMove = useCallback((e) => {
+    if (isResizing) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 300 && newWidth <= 600) {
+        setPanelWidth(newWidth);
+      }
+    }
+  }, [isResizing]);
+
+  /**
+   * Handle panel resize end
+   */
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  // Set up resize event listeners
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleResizeMove);
+      window.addEventListener('mouseup', handleResizeEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleResizeMove);
+        window.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
   return (
     <div className="w-full h-screen flex bg-gray-50 relative">
       {/* Left Sidebar - Scratch-style */}
@@ -362,15 +258,14 @@ function EducationalScratchApp() {
         {/* Control Buttons */}
         <div className="absolute top-4 right-4 flex gap-2 z-10">
           <button
-            onClick={runAgent}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-lg flex items-center gap-2"
-            title="Run agent simulation"
+            onClick={() => setShowChallengeSelector(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-lg flex items-center gap-2"
+            title="Select a challenge"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
             </svg>
-            Run Agent
+            Challenges
           </button>
           <button
             onClick={exportAgent}
@@ -389,92 +284,118 @@ function EducationalScratchApp() {
       </div>
 
       {/* Right Panel - Enhanced Sandbox & Debug Trail */}
-      <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
-        {/* Sandbox Viewport with Obstacles */}
-        <div className="h-1/2 border-b border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-gray-700">Agent Sandbox</h3>
-            {currentChallenge && (
-              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
-                {currentChallenge.title}
-              </span>
-            )}
-          </div>
-          <div className="relative w-full h-full bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border-2 border-gray-300 overflow-hidden">
-            {/* Agent representation */}
-            <div
-              className="absolute w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold transition-all duration-500 shadow-lg z-10"
-              style={{
-                left: `${agentPos.x}%`,
-                top: `${agentPos.y}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-              title="Your AI Agent"
-            >
-              AI
-            </div>
+      {!isPanelCollapsed ? (
+        <div
+          className="bg-white border-l-2 border-gray-300 flex flex-col shadow-xl relative"
+          style={{ width: `${panelWidth}px` }}
+        >
+          {/* Resize Handle */}
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-indigo-500 transition-colors z-10"
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          />
 
-            {/* Obstacles */}
-            {obstacles.map((obs, idx) => (
-              <div
-                key={idx}
-                className="absolute bg-red-400 opacity-70 rounded"
-                style={{
-                  left: `${obs.x}%`,
-                  top: `${obs.y}%`,
-                  width: `${obs.width}%`,
-                  height: `${obs.height}%`
-                }}
-                title="Obstacle"
-              />
-            ))}
+          {/* Collapse Button */}
+          <button
+            onClick={() => setIsPanelCollapsed(true)}
+            className="absolute top-2 left-2 z-20 p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors shadow-sm"
+            title="Collapse panel"
+          >
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          </button>
 
-            {/* Goal marker */}
-            <div
-              className="absolute w-8 h-8 bg-green-500 rounded-full animate-pulse flex items-center justify-center text-white font-bold"
-              style={{
-                left: `${goalPos.x}%`,
-                top: `${goalPos.y}%`,
-                transform: 'translate(-50%, -50%)'
+          {/* Simulation Sandbox */}
+          <div className="h-1/2 border-b border-gray-200">
+            <SimulationSandbox
+              nodes={nodes}
+              challenge={currentChallenge}
+              onSuccess={() => {
+                addDebugMessage('success', '🎉 Challenge completed!', 'success');
+                setLastAction({ type: 'success' });
               }}
-              title="Goal"
-            >
-              🎯
-            </div>
+              onFailure={() => {
+                addDebugMessage('error', '❌ Challenge failed. Try again!', 'error');
+                setLastAction({ type: 'failure' });
+              }}
+            />
           </div>
+
+        {/* Toggle Tabs */}
+        <div className="border-b border-gray-200 flex">
+          <button
+            onClick={() => setRightPanelView('debug')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              rightPanelView === 'debug'
+                ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
+                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            🔍 Debug Trail
+          </button>
+          <button
+            onClick={() => setRightPanelView('lesson')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              rightPanelView === 'lesson'
+                ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
+                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            📚 Lesson
+          </button>
         </div>
 
-        {/* Enhanced Debug Trail */}
-        <div className="flex-1 p-4 overflow-y-auto">
-          <h3 className="text-sm font-bold text-gray-700 mb-2">Debug Trail</h3>
-          <p className="text-xs text-gray-500 mb-3">Watch how your agent thinks and acts</p>
-          <div className="space-y-2">
-            {debugTrail.map((entry, idx) => (
-              <div
-                key={idx}
-                className={`text-xs p-2 rounded border-l-4 ${
-                  entry.type === 'sense' ? 'bg-blue-50 border-blue-500' :
-                  entry.type === 'plan' ? 'bg-yellow-50 border-yellow-500' :
-                  entry.type === 'act' ? 'bg-green-50 border-green-500' :
-                  entry.type === 'reflect' ? 'bg-purple-50 border-purple-500' :
-                  entry.type === 'error' ? 'bg-red-50 border-red-500' :
-                  entry.type === 'success' ? 'bg-emerald-50 border-emerald-500' :
-                  entry.type === 'warning' ? 'bg-orange-50 border-orange-500' :
-                  'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <div className="font-semibold text-gray-700 capitalize mb-1 flex items-center justify-between">
-                  <span>{entry.type}</span>
-                  <span className="text-gray-400 text-xs">
-                    {new Date(entry.timestamp).toLocaleTimeString()}
-                  </span>
+        {/* Conditional Content Based on Toggle */}
+        {rightPanelView === 'debug' ? (
+          /* Debug Trail View */
+          <div className="flex-1 p-4 overflow-y-auto">
+            <h3 className="text-sm font-bold text-gray-700 mb-2">Debug Trail</h3>
+            <p className="text-xs text-gray-500 mb-3">Watch how your agent thinks and acts</p>
+            <div className="space-y-2">
+              {debugTrail.map((entry, idx) => (
+                <div
+                  key={idx}
+                  className={`text-xs p-2 rounded border-l-4 ${
+                    entry.type === 'sense' ? 'bg-blue-50 border-blue-500' :
+                    entry.type === 'plan' ? 'bg-yellow-50 border-yellow-500' :
+                    entry.type === 'act' ? 'bg-green-50 border-green-500' :
+                    entry.type === 'reflect' ? 'bg-purple-50 border-purple-500' :
+                    entry.type === 'error' ? 'bg-red-50 border-red-500' :
+                    entry.type === 'success' ? 'bg-emerald-50 border-emerald-500' :
+                    entry.type === 'warning' ? 'bg-orange-50 border-orange-500' :
+                    'bg-gray-50 border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold text-gray-700 capitalize mb-1 flex items-center justify-between">
+                    <span>{entry.type}</span>
+                    <span className="text-gray-400 text-xs">
+                      {new Date(entry.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div className="text-gray-600">{entry.message}</div>
                 </div>
-                <div className="text-gray-600">{entry.message}</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Lesson Content View */
+          <LessonContent nodes={nodes} />
+        )}
       </div>
+      ) : (
+        /* Collapsed Panel - Expand Button */
+        <button
+          onClick={() => setIsPanelCollapsed(false)}
+          className="fixed top-1/2 right-0 transform -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-l-lg shadow-lg hover:bg-indigo-700 transition-all z-50"
+          title="Expand panel"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
 
       {/* Edit Popup Modal */}
       {editingNode && (
@@ -494,6 +415,18 @@ function EducationalScratchApp() {
         onChallengeSelect={handleChallengeSelect}
         currentChallenge={currentChallenge}
       />
+
+      {/* Challenge Selector Modal */}
+      {showChallengeSelector && (
+        <ChallengeSelector
+          currentChallenge={currentChallenge}
+          onSelectChallenge={(challenge) => {
+            setCurrentChallenge(challenge);
+            addDebugMessage('info', `🎮 Challenge selected: ${challenge.title}`, 'challenge');
+          }}
+          onClose={() => setShowChallengeSelector(false)}
+        />
+      )}
     </div>
   );
 }
