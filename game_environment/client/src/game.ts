@@ -4,6 +4,7 @@ import { Camera } from "./camera";
 import { InputManager } from "./input";
 import { HUD } from "./hud";
 import { AssetManager } from "./assetManager";
+import { LightingSystem } from "./lighting";
 import { PacketType, type UpdatePacket, type PlayerData, type BulletData, type ObstacleData, type LootData, type SpectatorJoinPacket } from "../../common/src/packets";
 import { Guns } from "../../common/src/definitions/guns";
 import { getClientConfig, getWebSocketURL } from "../../common/src/config";
@@ -34,6 +35,7 @@ export class GameClient {
     private lastPlayerData: PlayerData | null = null;
     private lastUpdateTime = 0;
     private grassBackground!: PIXI.Graphics;
+    private lightingSystem!: LightingSystem;
 
     constructor() {
         this.app = new PIXI.Application();
@@ -56,9 +58,19 @@ export class GameClient {
 
         // Add grass texture background
         this.createGrassBackground();
+        this.grassBackground.zIndex = 0;
 
         // Load assets
         await this.assetManager.loadAssets();
+
+        // Initialize lighting system (sun-based shadows)
+        this.lightingSystem = new LightingSystem(this.app.stage);
+        this.lightingSystem.setShadowIntensity(0.4);
+        this.lightingSystem.setSunDirection(Vec(0.6, 0.8)); // Sun from top-right
+        this.lightingSystem.getContainer().zIndex = 100;
+
+        // Enable z-index sorting for proper layer ordering
+        this.app.stage.sortableChildren = true;
 
         // Initialize input manager after canvas is created
         this.input = new InputManager(this.app.canvas as HTMLCanvasElement);
@@ -284,6 +296,9 @@ export class GameClient {
             this.hud.showSpectatorMode();
             document.getElementById('hud')!.style.display = 'none';
         }
+
+        // Update lighting system with obstacle data
+        this.lightingSystem.updateObstacles(packet.obstacles);
     }
 
     private render(): void {
@@ -301,7 +316,7 @@ export class GameClient {
         }
 
         // Render obstacles (bottom layer)
-        for (const [id, obj] of this.obstacleSprites.entries()) {
+        for (const [_id, obj] of this.obstacleSprites.entries()) {
             const screenPos = this.camera.worldToScreen(obj.position);
             obj.container.position.set(screenPos.x, screenPos.y);
             obj.container.rotation = obj.rotation;
@@ -309,7 +324,7 @@ export class GameClient {
         }
 
         // Render loot
-        for (const [id, obj] of this.lootSprites.entries()) {
+        for (const [_id, obj] of this.lootSprites.entries()) {
             const screenPos = this.camera.worldToScreen(obj.position);
             obj.container.position.set(screenPos.x, screenPos.y);
             obj.container.scale.set(this.camera.zoom);
@@ -365,6 +380,9 @@ export class GameClient {
             graphic.lineTo(screenEnd.x, screenEnd.y);
             graphic.stroke({ color: 0xffff88, width: 1.5 * this.camera.zoom });
         }
+
+        // Update lighting system (renders sun-based shadows)
+        this.lightingSystem.update(this.camera);
     }
 
     private createPlayerSprite(playerData: PlayerData): RenderObject {
@@ -421,6 +439,8 @@ export class GameClient {
         container.addChild(weaponSprite);
 
         // Add nameText separately to stage so it doesn't rotate with player
+        container.zIndex = 20; // Game objects layer
+        nameText.zIndex = 200; // UI layer (above lighting)
         this.app.stage.addChild(container);
         this.app.stage.addChild(nameText);
 
@@ -554,6 +574,7 @@ export class GameClient {
             container.addChild(wall);
         }
 
+        container.zIndex = 10; // Obstacles layer
         this.app.stage.addChild(container);
 
         return {
@@ -592,6 +613,7 @@ export class GameClient {
             container.addChild(graphic);
         }
 
+        container.zIndex = 15; // Loot layer (above obstacles, below players)
         this.app.stage.addChild(container);
 
         return {

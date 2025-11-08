@@ -182,14 +182,14 @@ export default function AgentGameBuilder() {
 
   return (
     <div
-      className="flex h-screen overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100"
+      className="flex h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
       {/* Left Column - Game Preview & Run Button (2/5 width) */}
-      <div className="w-2/5 flex flex-col bg-white border-r border-slate-200 shadow-lg overflow-hidden">
-        {/* Top Half - Game Iframe */}
-        <div className="flex-1 p-3 flex flex-col min-h-0">
+      <div className="w-2/5 flex flex-col bg-white border-r border-slate-200 shadow-lg h-full overflow-hidden">
+        {/* Top - Game Iframe */}
+        <div className="flex-1 p-3 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Game Preview</h3>
             <a
@@ -212,7 +212,7 @@ export default function AgentGameBuilder() {
           </div>
         </div>
 
-        {/* Bottom Half - Run Button */}
+        {/* Bottom - Run Button */}
         <div className="p-3 border-t border-slate-200 flex-shrink-0">
           <button
             onClick={handleRun}
@@ -232,9 +232,9 @@ export default function AgentGameBuilder() {
       </div>
 
       {/* Right Side - Instructions & Builder Area (3/5 width) */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
         {/* Top - Instructions Section */}
-        <div className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+        <div className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0 overflow-hidden">
           <div className="px-6 py-2.5 flex items-center justify-between gap-3">
             <button
               onClick={prevInstruction}
@@ -283,8 +283,8 @@ export default function AgentGameBuilder() {
         {/* Bottom - Builder Container */}
         <div className="flex-1 flex relative min-h-0 overflow-hidden">
           {/* Sidebar - Blocks Palette */}
-          <div className="w-44 bg-white border-r border-slate-200 shadow-md p-3 overflow-y-auto flex-shrink-0">
-            <h2 className="font-bold text-slate-800 mb-3 uppercase text-xs tracking-wide">Agent Blocks</h2>
+          <div className="w-44 bg-white border-r border-slate-200 shadow-md p-3 flex-shrink-0 overflow-y-auto">
+            <h2 className="font-bold text-slate-800 mb-2 uppercase text-xs tracking-wide">Agent Blocks</h2>
             <div className="space-y-2">
               {BLOCK_TYPES.map(blockType => (
                 <div
@@ -299,8 +299,8 @@ export default function AgentGameBuilder() {
               ))}
             </div>
 
-            <div className="mt-4 pt-4 border-t border-slate-200 text-xs text-slate-600">
-              <p className="font-bold mb-2 uppercase tracking-wide">How to Use</p>
+            <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600">
+              <p className="font-bold mb-1.5 uppercase tracking-wide">How to Use</p>
               <ul className="space-y-1 leading-relaxed">
                 <li>• Drag to canvas</li>
                 <li>• Right-click to connect</li>
