@@ -42,6 +42,12 @@ export class Game {
     private usedSpawnPoints = new Set<number>();
     private usedColors = new Set<number>();
 
+    // Loot respawn tracking
+    private lootRespawnCheckInterval = 5000; // Check every 5 seconds
+    private lastLootRespawnCheck = 0;
+    private minXPOrbs = 15; // Minimum XP orbs on map
+    private minAmmo = 10; // Minimum ammo pickups on map
+
     // Pre-defined vibrant colors for players
     private playerColors: number[] = [
         0xFF4444, // Red
@@ -162,10 +168,16 @@ export class Game {
             }
         }
 
-        // 4. Serialize and broadcast
+        // 4. Check and respawn loot if needed
+        if (now - this.lastLootRespawnCheck >= this.lootRespawnCheckInterval) {
+            this.checkLootRespawn();
+            this.lastLootRespawnCheck = now;
+        }
+
+        // 5. Serialize and broadcast
         this.broadcast();
 
-        // 5. Schedule next tick
+        // 6. Schedule next tick
         this.currentTick++;
         const elapsed = Date.now() - now;
         const delay = Math.max(0, this.tickInterval - elapsed);
@@ -394,6 +406,92 @@ export class Game {
             const xpOrb = new Loot(this.nextLootId++, "xp_orb", orbPosition, xpPerOrb);
             this.loot.push(xpOrb);
         }
+    }
+
+    private checkLootRespawn(): void {
+        // Count active (not picked) loot by type
+        const activeLoot = this.loot.filter(l => !l.picked && !l.dead);
+        const xpOrbs = activeLoot.filter(l => l.type === "xp_orb").length;
+        const ammo = activeLoot.filter(l => l.type.startsWith("ammo_")).length;
+
+        // Respawn XP orbs if below minimum
+        if (xpOrbs < this.minXPOrbs) {
+            const toSpawn = this.minXPOrbs - xpOrbs;
+            for (let i = 0; i < toSpawn; i++) {
+                const position = this.getRandomLootPosition();
+                const xpAmount = 10 + Math.floor(Math.random() * 40); // 10-50 XP
+                const xpOrb = new Loot(this.nextLootId++, "xp_orb", position, xpAmount);
+                this.loot.push(xpOrb);
+            }
+            console.log(`[Game] Respawned ${toSpawn} XP orbs (total active: ${xpOrbs + toSpawn})`);
+        }
+
+        // Respawn ammo if below minimum
+        if (ammo < this.minAmmo) {
+            const toSpawn = this.minAmmo - ammo;
+            for (let i = 0; i < toSpawn; i++) {
+                const position = this.getRandomLootPosition();
+                const ammoType = "universal"; // Could randomize types later
+                const ammoCount = 3 + Math.floor(Math.random() * 7); // 3-10 rounds
+                const ammoLoot = new Loot(this.nextLootId++, `ammo_${ammoType}`, position, ammoCount);
+                this.loot.push(ammoLoot);
+            }
+            console.log(`[Game] Respawned ${toSpawn} ammo pickups (total active: ${ammo + toSpawn})`);
+        }
+    }
+
+    private getRandomLootPosition(): Vector {
+        // Get random position that doesn't collide with obstacles
+        const maxAttempts = 50; // Increased attempts for better distribution
+        const lootRadius = 2; // Small loot pickup radius
+        const bufferDistance = 8; // Extra buffer around obstacles
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const x = 50 + Math.random() * (GameConstants.MAP_WIDTH - 100);
+            const y = 50 + Math.random() * (GameConstants.MAP_HEIGHT - 100);
+            const position = Vec(x, y);
+
+            // Check collision with obstacles (with buffer)
+            let collides = false;
+            for (const obstacle of this.obstacles) {
+                // Create a test hitbox with buffer distance
+                const testHitbox = new CircleHitbox(lootRadius + bufferDistance, position);
+                if (obstacle.hitbox.collidesWith(testHitbox)) {
+                    collides = true;
+                    break;
+                }
+            }
+
+            if (!collides) {
+                return position;
+            }
+        }
+
+        // Fallback: try to find any open space near map center
+        for (let attempt = 0; attempt < 20; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 30 + Math.random() * 50;
+            const position = Vec(
+                GameConstants.MAP_WIDTH / 2 + Math.cos(angle) * radius,
+                GameConstants.MAP_HEIGHT / 2 + Math.sin(angle) * radius
+            );
+
+            let collides = false;
+            for (const obstacle of this.obstacles) {
+                const testHitbox = new CircleHitbox(lootRadius + bufferDistance, position);
+                if (obstacle.hitbox.collidesWith(testHitbox)) {
+                    collides = true;
+                    break;
+                }
+            }
+
+            if (!collides) {
+                return position;
+            }
+        }
+
+        // Final fallback to exact center
+        return Vec(GameConstants.MAP_WIDTH / 2, GameConstants.MAP_HEIGHT / 2);
     }
 
     private getUniqueColor(): number {
