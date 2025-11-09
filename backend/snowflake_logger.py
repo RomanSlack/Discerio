@@ -216,29 +216,51 @@ class SnowflakeHandler(logging.Handler):
         try:
             cursor = self.connection.cursor()
 
-            # Build INSERT statement
-            insert_sql = f"""
-                INSERT INTO {self.table_name} (
-                    log_timestamp, level, logger_name, message,
-                    agent_id, endpoint, execution_context,
-                    exception_type, exception_message, stack_trace,
-                    metadata, host, process_id, thread_name
-                ) VALUES (
-                    %(log_timestamp)s, %(level)s, %(logger_name)s, %(message)s,
-                    %(agent_id)s, %(endpoint)s, %(execution_context)s,
-                    %(exception_type)s, %(exception_message)s, %(stack_trace)s,
-                    PARSE_JSON(%(metadata)s), %(host)s, %(process_id)s, %(thread_name)s
-                )
-            """
+            # Insert each row individually to handle PARSE_JSON properly
+            import json
 
-            # Convert metadata dicts to JSON strings
             for row in self.batch:
-                if row['metadata']:
-                    import json
-                    row['metadata'] = json.dumps(row['metadata'])
+                metadata_json = json.dumps(row['metadata']) if row['metadata'] else None
 
-            # Execute batch insert
-            cursor.executemany(insert_sql, self.batch)
+                if metadata_json:
+                    insert_sql = f"""
+                        INSERT INTO {self.table_name} (
+                            log_timestamp, level, logger_name, message,
+                            agent_id, endpoint, execution_context,
+                            exception_type, exception_message, stack_trace,
+                            metadata, host, process_id, thread_name
+                        ) SELECT
+                            %s, %s, %s, %s,
+                            %s, %s, %s,
+                            %s, %s, %s,
+                            PARSE_JSON(%s), %s, %s, %s
+                    """
+                    cursor.execute(insert_sql, (
+                        row['log_timestamp'], row['level'], row['logger_name'], row['message'],
+                        row['agent_id'], row['endpoint'], row['execution_context'],
+                        row['exception_type'], row['exception_message'], row['stack_trace'],
+                        metadata_json, row['host'], row['process_id'], row['thread_name']
+                    ))
+                else:
+                    insert_sql = f"""
+                        INSERT INTO {self.table_name} (
+                            log_timestamp, level, logger_name, message,
+                            agent_id, endpoint, execution_context,
+                            exception_type, exception_message, stack_trace,
+                            metadata, host, process_id, thread_name
+                        ) VALUES (
+                            %s, %s, %s, %s,
+                            %s, %s, %s,
+                            %s, %s, %s,
+                            NULL, %s, %s, %s
+                        )
+                    """
+                    cursor.execute(insert_sql, (
+                        row['log_timestamp'], row['level'], row['logger_name'], row['message'],
+                        row['agent_id'], row['endpoint'], row['execution_context'],
+                        row['exception_type'], row['exception_message'], row['stack_trace'],
+                        row['host'], row['process_id'], row['thread_name']
+                    ))
             cursor.close()
 
             logging.debug(f"✓ Flushed {len(self.batch)} logs to Snowflake")
