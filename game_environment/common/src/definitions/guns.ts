@@ -22,7 +22,7 @@ export const Guns: Record<string, GunDefinition> = {
         reloadTime: 0,
         fireDelay: 300,
         damage: 25,
-        range: 6,
+        range: 12,
         speed: 0,
         bulletCount: 1,
         isMelee: true

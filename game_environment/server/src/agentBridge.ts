@@ -161,7 +161,13 @@ export class AgentBridge {
 
         // Check AI agents if not found in players (use agentId string only)
         if (!targetPosition) {
-            const otherAgent = this.game.aiAgents.get(targetId);
+            let otherAgent = this.game.aiAgents.get(targetId);
+
+            // If not found, try prefixing with "AI_" (LLMs often just use the number)
+            if (!otherAgent && !targetId.startsWith('AI_')) {
+                otherAgent = this.game.aiAgents.get(`AI_${targetId}`);
+            }
+
             if (otherAgent) {
                 targetPosition = otherAgent.position;
             }

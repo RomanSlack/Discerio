@@ -60,6 +60,13 @@ const BLOCK_CATEGORIES = {
       { id: 'plan', label: 'Plan', tool_type: 'plan', parameters: { plan: 'string' } },
       { id: 'search', label: 'Search Web', tool_type: 'search', parameters: { query: 'string' } },
     ]
+  },
+  mystery: {
+    label: 'Mystery',
+    color: '#9333ea',
+    blocks: [
+      { id: 'mystery', label: '🐱 Mystery', special: 'catParty' },
+    ]
   }
 };
 
@@ -1484,7 +1491,51 @@ export default function AgentGameBuilder() {
                   {category.blocks.map(blockDef => (
                     <div
                       key={blockDef.id}
-                      onMouseDown={(e) => handlePaletteMouseDown(e, blockDef, categoryKey)}
+                      onMouseDown={(e) => {
+                        // Easter egg: Cat Party!
+                        if (blockDef.special === 'catParty') {
+                          e.preventDefault();
+                          e.stopPropagation();
+
+                          const emojis = ['🐱', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🐈', '🐈‍⬛'];
+                          const colors = ['#9333ea', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'];
+
+                          for (let i = 0; i < 30; i++) {
+                            setTimeout(() => {
+                              const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                              const color = colors[Math.floor(Math.random() * colors.length)];
+                              const x = Math.random() * window.innerWidth;
+                              const y = Math.random() * window.innerHeight;
+
+                              const catElement = document.createElement('div');
+                              catElement.textContent = emoji;
+                              catElement.style.position = 'fixed';
+                              catElement.style.left = x + 'px';
+                              catElement.style.top = y + 'px';
+                              catElement.style.fontSize = '48px';
+                              catElement.style.pointerEvents = 'none';
+                              catElement.style.zIndex = '9999';
+                              catElement.style.filter = `drop-shadow(0 0 10px ${color})`;
+                              catElement.style.transition = 'all 2s ease-out';
+                              catElement.style.opacity = '1';
+
+                              document.body.appendChild(catElement);
+
+                              setTimeout(() => {
+                                catElement.style.opacity = '0';
+                                catElement.style.transform = 'translateY(-100px) scale(2)';
+                              }, 100);
+
+                              setTimeout(() => catElement.remove(), 2100);
+                            }, i * 100);
+                          }
+
+                          toast.success('🐱 MEOW MEOW CAT PARTY! 🐱', { duration: 3000 });
+                          return;
+                        }
+
+                        handlePaletteMouseDown(e, blockDef, categoryKey);
+                      }}
                       className="w-full text-white text-sm font-medium py-2 px-3 rounded shadow cursor-grab hover:opacity-80 active:cursor-grabbing select-none"
                       style={{ backgroundColor: category.color }}
                     >
@@ -1929,7 +1980,51 @@ export default function AgentGameBuilder() {
                     else delete blockRefs.current[block.id];
                   }}
                   onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
-                  onClick={(e) => handleBlockClick(e, block.id)}
+                  onClick={(e) => {
+                    // Easter egg: Cat Party!
+                    if (block.special === 'catParty') {
+                      e.preventDefault();
+                      e.stopPropagation();
+
+                      const emojis = ['🐱', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🐈', '🐈‍⬛'];
+                      const colors = ['#9333ea', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'];
+
+                      for (let i = 0; i < 30; i++) {
+                        setTimeout(() => {
+                          const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                          const color = colors[Math.floor(Math.random() * colors.length)];
+                          const x = Math.random() * window.innerWidth;
+                          const y = Math.random() * window.innerHeight;
+
+                          const catElement = document.createElement('div');
+                          catElement.textContent = emoji;
+                          catElement.style.position = 'fixed';
+                          catElement.style.left = x + 'px';
+                          catElement.style.top = y + 'px';
+                          catElement.style.fontSize = '48px';
+                          catElement.style.pointerEvents = 'none';
+                          catElement.style.zIndex = '9999';
+                          catElement.style.filter = `drop-shadow(0 0 10px ${color})`;
+                          catElement.style.transition = 'all 2s ease-out';
+                          catElement.style.opacity = '1';
+
+                          document.body.appendChild(catElement);
+
+                          setTimeout(() => {
+                            catElement.style.opacity = '0';
+                            catElement.style.transform = 'translateY(-100px) scale(2)';
+                          }, 100);
+
+                          setTimeout(() => catElement.remove(), 2100);
+                        }, i * 100);
+                      }
+
+                      toast.success('🐱 MEOW MEOW CAT PARTY! 🐱', { duration: 3000 });
+                      return;
+                    }
+
+                    handleBlockClick(e, block.id);
+                  }}
                   onContextMenu={(e) => handleBlockRightClick(e, block.id)}
                   onDoubleClick={(e) => handleBlockDoubleClick(e, block.id)}
                   className={`absolute rounded-lg shadow-lg text-white text-sm font-medium cursor-move select-none hover:shadow-xl ${isExecuting ? 'active-executing-node' : ''}`}
