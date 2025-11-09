@@ -1362,8 +1362,14 @@ export default function AgentGameBuilder() {
         {/* Grid View overlay - covers Instructions + Block Builder + Canvas */}
         {showGridView && (
           <div className="absolute inset-0 z-30">
-            <div className={`w-full h-full ${theme.bg.secondary} ${theme.text.primary} border-l ${theme.border.primary} shadow-xl overflow-auto`}>
-              <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: theme.isDark ? '#404040' : '#e5e7eb' }}>
+            <div
+              className={`w-full h-full ${theme.bg.secondary} ${theme.text.primary} border-l ${theme.border.primary} shadow-xl overflow-auto`}
+              style={{ backgroundColor: theme.isDark ? '#2d2d2d' : '#ffffff' }}
+            >
+              <div
+                className={`flex items-center justify-between px-4 py-2 border-b ${theme.bg.secondary}`}
+                style={{ borderColor: theme.isDark ? '#404040' : '#e5e7eb', backgroundColor: theme.isDark ? '#2d2d2d' : '#ffffff' }}
+              >
                 <h3 className="font-bold">Grid View</h3>
                 <button
                   onClick={() => setShowGridView(false)}
