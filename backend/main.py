@@ -21,6 +21,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Configure Snowflake logging if enabled
+try:
+    from snowflake_logger import configure_snowflake_logging
+    configure_snowflake_logging()
+except Exception as e:
+    logger.warning(f"Snowflake logging not configured: {e}")
+
 # Load environment variables
 DEFAULT_STEP_DELAY = float(os.getenv("STEP_DELAY", "6.0"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "5.0"))
