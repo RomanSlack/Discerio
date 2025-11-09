@@ -145,21 +145,20 @@ export class AgentBridge {
         // Find target (check both players and AI agents)
         let targetPosition: Vector | null = null;
 
-        // Check human players
-        for (const player of this.game.players.values()) {
-            if (player.id.toString() === targetId || `player_${player.id}` === targetId) {
+        // Check human players (ONLY accept player_X format to prevent ID collision)
+        if (targetId.startsWith('player_')) {
+            const playerId = parseInt(targetId.substring(7)); // Remove "player_" prefix
+            const player = this.game.players.get(playerId);
+            if (player) {
                 targetPosition = player.position;
-                break;
             }
         }
 
-        // Check AI agents if not found in players
+        // Check AI agents if not found in players (use agentId string only)
         if (!targetPosition) {
-            for (const otherAgent of this.game.aiAgents.values()) {
-                if (otherAgent.agentId === targetId || otherAgent.id.toString() === targetId) {
-                    targetPosition = otherAgent.position;
-                    break;
-                }
+            const otherAgent = this.game.aiAgents.get(targetId);
+            if (otherAgent) {
+                targetPosition = otherAgent.position;
             }
         }
 
@@ -222,9 +221,8 @@ export class AgentBridge {
         // Get nearby agents (both human players and AI agents)
         const nearbyAgents: BackendGameState["nearby_agents"] = [];
 
-        // Add human players
+        // Add human players (they can never be the same as the requesting AI agent)
         for (const player of this.game.players.values()) {
-            if (player.id === agent.id) continue;
             const distSquared = Geometry.distanceSquared(agent.position, player.position);
             if (distSquared <= nearbyRadiusSquared) {
                 nearbyAgents.push({

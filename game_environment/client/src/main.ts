@@ -10,15 +10,20 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8001';
 // Call backend to register agents and start auto-stepping
 async function startBackendAgents() {
     try {
-        console.log('Registering agents in game...');
+        console.log('Checking if agents need to be registered...');
         const registerResponse = await fetch(`${BACKEND_URL}/register-agents-in-game`, {
             method: 'POST',
         });
 
         if (!registerResponse.ok) {
             const error = await registerResponse.json();
-            console.warn('Failed to register agents:', error);
-            return;
+            // Game session already active is fine - agents are already running
+            if (error.detail?.includes('already active')) {
+                console.log('Game session already active - agents already running');
+            } else {
+                console.warn('Failed to register agents:', error);
+            }
+            return; // Don't try to start auto-stepping if registration failed
         }
 
         const registerData = await registerResponse.json();
@@ -32,7 +37,12 @@ async function startBackendAgents() {
 
         if (!autoStepResponse.ok) {
             const error = await autoStepResponse.json();
-            console.warn('Failed to start auto-stepping:', error);
+            // Auto-stepping already running is fine
+            if (error.detail?.includes('already running')) {
+                console.log('Auto-stepping already running');
+            } else {
+                console.warn('Failed to start auto-stepping:', error);
+            }
             return;
         }
 
@@ -80,8 +90,8 @@ async function init() {
         try {
             await gameClient.connect(username, false, selectedZone); // Pass selected zone
 
-            // Start backend agent system
-            await startBackendAgents();
+            // Don't call startBackendAgents() here - agents should be deployed from the lessons page
+            // This allows human players to join without being converted to backend agents
 
             menu.classList.remove('visible');
             connected = true;
@@ -104,8 +114,8 @@ async function init() {
         try {
             await gameClient.connect(username, true); // Join as spectator
 
-            // Start backend agent system
-            await startBackendAgents();
+            // Don't call startBackendAgents() here - agents should be deployed from the lessons/builder page
+            // This allows spectators to join without triggering backend agent registration
 
             menu.classList.remove('visible');
             connected = true;

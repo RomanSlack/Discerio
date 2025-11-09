@@ -208,84 +208,83 @@ export class HUD {
             right: 20px;
             background: rgba(0, 0, 0, 0.85);
             color: white;
-            padding: 12px;
-            border-radius: 10px;
+            padding: 10px;
+            border-radius: 8px;
             font-family: monospace;
             font-size: 12px;
             z-index: 100;
             border: 2px solid rgba(255, 215, 0, 0.6);
-            width: 240px;
             display: none;
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            transition: all 0.2s ease;
         `;
 
-        // Title (smaller)
+        // Title with toggle indicator
         const title = document.createElement('div');
+        title.id = 'leaderboard-title';
         title.style.cssText = `
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
-            margin-bottom: 8px;
             color: #FFD700;
-            text-align: center;
-            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
-            padding-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
         `;
-        title.textContent = '🏆 TOP PLAYERS';
+        title.innerHTML = '<span id="leaderboard-header">🏆 TOP PLAYER</span><span id="leaderboard-toggle">▼</span>';
 
-        // Combined entries container with fixed height (shows top 3, scroll for rest)
-        const entriesWrapper = document.createElement('div');
-        entriesWrapper.style.cssText = `
-            max-height: 180px;
-            overflow-y: auto;
-            overflow-x: hidden;
-        `;
-
+        // Entries container
         const entriesContainer = document.createElement('div');
         entriesContainer.id = 'leaderboard-entries';
         entriesContainer.style.cssText = `
             display: flex;
             flex-direction: column;
             gap: 6px;
+            margin-top: 8px;
         `;
 
-        // Custom scrollbar styling for webkit browsers
-        const style = document.createElement('style');
-        style.textContent = `
-            #leaderboard > div:last-child::-webkit-scrollbar {
-                width: 6px;
-            }
-            #leaderboard > div:last-child::-webkit-scrollbar-track {
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 3px;
-            }
-            #leaderboard > div:last-child::-webkit-scrollbar-thumb {
-                background: rgba(255, 215, 0, 0.5);
-                border-radius: 3px;
-            }
-            #leaderboard > div:last-child::-webkit-scrollbar-thumb:hover {
-                background: rgba(255, 215, 0, 0.7);
-            }
-        `;
-        document.head.appendChild(style);
+        // Add click handler for toggle
+        let isExpanded = false;
+        container.addEventListener('click', () => {
+            isExpanded = !isExpanded;
+            const toggle = document.getElementById('leaderboard-toggle');
 
-        // Firefox scrollbar
-        entriesWrapper.style.scrollbarWidth = 'thin';
-        entriesWrapper.style.scrollbarColor = 'rgba(255, 215, 0, 0.5) rgba(0, 0, 0, 0.3)';
+            if (isExpanded) {
+                entriesContainer.style.display = 'flex';
+                if (toggle) toggle.textContent = '▲';
+            } else {
+                entriesContainer.style.display = 'none';
+                if (toggle) toggle.textContent = '▼';
+            }
+        });
 
-        entriesWrapper.appendChild(entriesContainer);
         container.appendChild(title);
-        container.appendChild(entriesWrapper);
+        container.appendChild(entriesContainer);
         document.body.appendChild(container);
+
+        // Start minimized
+        entriesContainer.style.display = 'none';
 
         return container;
     }
 
     updateLeaderboard(players: Array<{ id: number; username: string; xp: number; level: number; dead: boolean; kills?: number }>): void {
         const entriesContainer = document.getElementById('leaderboard-entries');
+        const headerElement = document.getElementById('leaderboard-header');
         if (!entriesContainer) return;
 
         // Sort players by XP (descending)
         const sorted = [...players].sort((a, b) => (b.xp || 0) - (a.xp || 0));
+
+        // Update header with top player info
+        if (sorted.length > 0 && headerElement) {
+            const topPlayer = sorted[0];
+            const killsText = (topPlayer.kills !== undefined && topPlayer.kills > 0) ? ` ${topPlayer.kills}💀` : '';
+            headerElement.innerHTML = `👑 ${topPlayer.username}${killsText} - ${topPlayer.xp}xp`;
+        } else if (headerElement) {
+            headerElement.textContent = '🏆 TOP PLAYER';
+        }
 
         // Clear existing entries
         entriesContainer.innerHTML = '';

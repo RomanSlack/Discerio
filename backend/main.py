@@ -759,6 +759,14 @@ async def add_agent(request: AddAgentRequest):
             detail=f"Agent with ID '{agent_id}' already exists"
         )
 
+    # Validate agent ID doesn't conflict with reserved player IDs
+    normalized_id = agent_id.lower()
+    if normalized_id == 'player' or (normalized_id.startswith('player') and normalized_id[6:].isdigit()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Agent ID '{agent_id}' is reserved. Player IDs (Player, Player1, Player2, etc.) cannot be used for AI agents."
+        )
+
     # Find the onStart action block
     on_start_block = None
     for block in request.blocks:
@@ -802,6 +810,19 @@ async def add_agent(request: AddAgentRequest):
                 request.zone2_left_only
             )
             game_session.registered_agents[agent_id] = True
+
+            # Activate game session if this is the first agent registered
+            if not game_session.active:
+                game_session.active = True
+                logger.info("Game session activated by first agent registration")
+
+            # Auto-start stepping if not already running and we have registered agents
+            if not game_session.auto_stepping and len(game_session.registered_agents) > 0:
+                game_session.auto_stepping = True
+                game_session.step_delay = DEFAULT_STEP_DELAY
+                asyncio.create_task(auto_step_loop())
+                logger.info(f"Auto-stepping started automatically (delay: {DEFAULT_STEP_DELAY}s)")
+
             zone_info = f" in {request.preferred_zone}" if request.preferred_zone else ""
             left_info = " (left side only)" if request.zone2_left_only and request.preferred_zone == "zone2" else ""
             logger.info(f"Agent {agent_id} registered in game environment{zone_info}{left_info}")
@@ -958,17 +979,22 @@ async def execute_game_step():
     2. Call /next-step-for-agents for each agent (uses Dedalus LLM) - ALL SIMULTANEOUSLY
     3. Send actions back to game environment
     """
+    registered_agents = list(game_session.registered_agents.keys())
+    if not registered_agents:
+        # No agents to process, return empty result (auto-step loop will continue)
+        return {
+            "success": True,
+            "step": game_session.step_count,
+            "agents_processed": 0,
+            "step_duration": 0,
+            "results": {},
+            "message": "No agents to process"
+        }
+
     if not game_session.active:
         raise HTTPException(
             status_code=400,
-            detail="No active game session. Call /register-agents-in-game first"
-        )
-
-    registered_agents = list(game_session.registered_agents.keys())
-    if not registered_agents:
-        raise HTTPException(
-            status_code=400,
-            detail="No agents registered in game"
+            detail="No active game session"
         )
 
     logger.info(f"Executing game step {game_session.step_count + 1} for {len(registered_agents)} agents")
@@ -1017,20 +1043,31 @@ async def execute_game_step():
 async def start_auto_stepping(step_delay: Optional[float] = None):
     """
     Start automatic stepping at specified interval.
+    If already running, returns success without error.
 
     Args:
         step_delay: Delay in seconds between steps (default: from STEP_DELAY env variable, currently {})
     """.format(DEFAULT_STEP_DELAY)
+
+    # If auto-stepping is already running, return success (idempotent)
+    if game_session.auto_stepping:
+        logger.info("Auto-stepping already running, returning success")
+        return {
+            "success": True,
+            "auto_stepping": True,
+            "step_delay": game_session.step_delay,
+            "already_running": True
+        }
+
+    # Activate session if we have agents but session is not active
+    if not game_session.active and len(game_session.registered_agents) > 0:
+        game_session.active = True
+        logger.info("Game session activated by auto-stepping request")
+
     if not game_session.active:
         raise HTTPException(
             status_code=400,
-            detail="No active game session. Call /register-agents-in-game first"
-        )
-
-    if game_session.auto_stepping:
-        raise HTTPException(
-            status_code=400,
-            detail="Auto-stepping already active"
+            detail="No active game session. Add agents first with /add-agent"
         )
 
     game_session.auto_stepping = True
@@ -1038,11 +1075,13 @@ async def start_auto_stepping(step_delay: Optional[float] = None):
 
     # Start background task
     asyncio.create_task(auto_step_loop())
+    logger.info(f"Auto-stepping started (delay: {game_session.step_delay}s)")
 
     return {
         "success": True,
         "auto_stepping": True,
-        "step_delay": step_delay
+        "step_delay": game_session.step_delay,
+        "already_running": False
     }
 
 
@@ -1058,41 +1097,87 @@ async def stop_auto_stepping():
     }
 
 
+class CleanupRequest(BaseModel):
+    """Request model for cleanup-game-session endpoint"""
+    agent_ids: Optional[List[str]] = Field(
+        None,
+        description="List of specific agents to remove (None = remove all)"
+    )
+    stop_auto_stepping: bool = Field(
+        True,
+        description="Whether to stop the auto-step loop"
+    )
+
+
 @app.post("/cleanup-game-session")
-async def cleanup_game_session():
+async def cleanup_game_session(request: Optional[CleanupRequest] = None):
     """
-    Stop the game session and clean up all agents from the game environment.
+    Clean up agents from game session with selective removal support.
+
+    Args:
+        request: Optional cleanup request with agent_ids and stop_auto_stepping flag
+                 If None, removes all agents and stops auto-stepping (legacy behavior)
     """
-    if not game_session.active:
+    if not game_session.active and not agents:
         raise HTTPException(
             status_code=400,
-            detail="No active game session"
+            detail="No active game session and no agents to clean up"
         )
 
-    # Stop auto-stepping if active
-    game_session.auto_stepping = False
+    # Handle legacy behavior (no request body)
+    if request is None:
+        request = CleanupRequest(agent_ids=None, stop_auto_stepping=True)
 
-    # Remove all agents from game environment
+    # Determine which agents to remove
+    agents_to_remove = request.agent_ids if request.agent_ids else list(agents.keys())
+
+    if not agents_to_remove:
+        return {
+            "success": True,
+            "removed_count": 0,
+            "remaining_agents": len(agents),
+            "auto_stepping": game_session.auto_stepping,
+            "removal_results": {}
+        }
+
+    # Remove agents from both backend and game environment
     removal_results = {}
-    for agent_id in list(game_session.registered_agents.keys()):
+    for agent_id in agents_to_remove:
         try:
+            # Remove from backend state
+            if agent_id in agents:
+                del agents[agent_id]
+
+            # Remove from game session tracking
+            if agent_id in game_session.registered_agents:
+                del game_session.registered_agents[agent_id]
+
+            # Remove from game environment
             await game_client.remove_agent(agent_id)
             removal_results[agent_id] = {"success": True}
-            logger.info(f"Removed agent {agent_id} from game")
+            logger.info(f"Cleaned up agent {agent_id}")
         except Exception as e:
-            logger.error(f"Failed to remove agent {agent_id}: {e}")
+            logger.error(f"Failed to cleanup agent {agent_id}: {e}")
             removal_results[agent_id] = {"success": False, "error": str(e)}
 
-    # Clear session state
-    game_session.registered_agents.clear()
-    game_session.active = False
-    final_step = game_session.step_count
-    game_session.step_count = 0
+    # Stop auto-stepping if requested
+    if request.stop_auto_stepping:
+        game_session.auto_stepping = False
+        logger.info("Auto-stepping stopped by cleanup request")
+
+    # Deactivate session if no agents left
+    if len(agents) == 0:
+        game_session.active = False
+        final_step = game_session.step_count
+        game_session.step_count = 0
+        logger.info(f"Game session deactivated, final step: {final_step}")
 
     return {
         "success": True,
-        "session_active": False,
-        "final_step": final_step,
+        "removed_count": len([r for r in removal_results.values() if r.get("success")]),
+        "remaining_agents": len(agents),
+        "session_active": game_session.active,
+        "auto_stepping": game_session.auto_stepping,
         "removal_results": removal_results
     }
 
@@ -1139,6 +1224,88 @@ async def get_agents_state():
         "agents": agent_states,
         "session_active": game_session.active,
         "step_count": game_session.step_count
+    }
+
+
+@app.get("/list-agents")
+async def list_agents():
+    """
+    Get list of all registered agents with their current state.
+    """
+    agent_list = []
+    for agent_id, agent_state in agents.items():
+        agent_list.append({
+            "agent_id": agent_id,
+            "current_node": agent_state.current_node,
+            "registered_in_game": agent_id in game_session.registered_agents,
+            "block_count": len(agent_state.program.blocks) if agent_state.program else 0,
+            "has_plan": agent_state.current_plan is not None,
+            "action_history_count": len(agent_state.past_actions)
+        })
+
+    return {
+        "success": True,
+        "total_agents": len(agents),
+        "agents": agent_list,
+        "auto_stepping": game_session.auto_stepping,
+        "session_active": game_session.active
+    }
+
+
+@app.delete("/remove-agent/{agent_id}")
+async def remove_agent(agent_id: str):
+    """
+    Remove a single agent from both backend and game environment.
+    Other agents continue running. Auto-stepping continues if other agents exist.
+
+    Args:
+        agent_id: Unique identifier of the agent to remove
+    """
+    # Check if agent exists in backend
+    if agent_id not in agents:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not found in backend"
+        )
+
+    # Remove from backend state
+    del agents[agent_id]
+    logger.info(f"Removed agent {agent_id} from backend state")
+
+    # Remove from game session tracking
+    was_in_game = False
+    if agent_id in game_session.registered_agents:
+        del game_session.registered_agents[agent_id]
+        was_in_game = True
+        logger.info(f"Removed agent {agent_id} from game session tracking")
+
+    # Remove from game environment
+    game_removal_success = False
+    game_removal_error = None
+    try:
+        result = await game_client.remove_agent(agent_id)
+        game_removal_success = result.get("success", False)
+        logger.info(f"Removed agent {agent_id} from game environment")
+    except Exception as e:
+        game_removal_error = str(e)
+        logger.error(f"Failed to remove agent {agent_id} from game environment: {e}")
+
+    # If no agents left, deactivate session but don't stop auto-stepping
+    # (it will naturally stop when no agents to process)
+    if len(game_session.registered_agents) == 0:
+        game_session.active = False
+        logger.info("No agents remaining, game session deactivated")
+
+    return {
+        "success": True,
+        "agent_id": agent_id,
+        "removed_from_backend": True,
+        "removed_from_game": game_removal_success,
+        "game_removal_error": game_removal_error,
+        "was_registered_in_game": was_in_game,
+        "remaining_agents": len(agents),
+        "session_active": game_session.active,
+        "auto_stepping": game_session.auto_stepping
     }
 
 
