@@ -465,12 +465,33 @@ export class AIAgent extends GameObject {
         const progress = Math.min(elapsed / this.moveDuration, 1.0);
 
         if (progress >= 1.0) {
-            // Movement complete - snap to final position
-            this.position = Vec.clone(this.moveTarget);
-            this.hitbox.position = this.position;
+            // Movement complete - verify final position is still collision-free before snapping
+            const finalHitbox = new CircleHitbox(GameConstants.PLAYER_RADIUS, this.moveTarget);
+            const nearbyObjects = game.grid.intersectsHitbox(finalHitbox);
+
+            let collision = false;
+            for (const obj of nearbyObjects) {
+                if (obj === this) continue;
+                // Skip collision if it's a passable obstacle (open gate or destroyed)
+                if ('isPassable' in obj && typeof obj.isPassable === 'function' && obj.isPassable()) {
+                    continue;
+                }
+                if (finalHitbox.collidesWith(obj.hitbox)) {
+                    collision = true;
+                    break;
+                }
+            }
+
+            if (!collision) {
+                // Safe to snap to final position
+                this.position = Vec.clone(this.moveTarget);
+                this.hitbox.position = this.position;
+                game.grid.updateObject(this);
+            }
+
+            // Clear movement state regardless of collision (movement attempt complete)
             this.moveTarget = null;
             this.moveStartPos = null;
-            game.grid.updateObject(this);
         } else {
             // Interpolate position using ease-in-out cubic for ultra-smooth motion
             // Starts slow, speeds up, then slows down again
@@ -478,12 +499,39 @@ export class AIAgent extends GameObject {
                 ? 4 * progress * progress * progress
                 : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
-            this.position = Vec.add(
+            const newPosition = Vec.add(
                 this.moveStartPos,
                 Vec.scale(Vec.sub(this.moveTarget, this.moveStartPos), easeProgress)
             );
-            this.hitbox.position = this.position;
-            game.grid.updateObject(this);
+
+            // Check collision at interpolated position
+            const newHitbox = new CircleHitbox(GameConstants.PLAYER_RADIUS, newPosition);
+            const nearbyObjects = game.grid.intersectsHitbox(newHitbox);
+
+            let collision = false;
+            for (const obj of nearbyObjects) {
+                if (obj === this) continue;
+                // Skip collision if it's a passable obstacle (open gate or destroyed)
+                if ('isPassable' in obj && typeof obj.isPassable === 'function' && obj.isPassable()) {
+                    continue;
+                }
+                if (newHitbox.collidesWith(obj.hitbox)) {
+                    collision = true;
+                    break;
+                }
+            }
+
+            if (!collision) {
+                // Safe to move to interpolated position
+                this.position = newPosition;
+                this.hitbox.position = this.position;
+                game.grid.updateObject(this);
+            } else {
+                // Collision detected during smooth movement - stop immediately
+                // Keep agent at current position and cancel remaining movement
+                this.moveTarget = null;
+                this.moveStartPos = null;
+            }
         }
     }
 
