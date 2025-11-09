@@ -270,12 +270,16 @@ export class GameClient {
 
             // Update player dead state and detect death transitions
             if (playerData.dead) {
-                renderObj.container.alpha = 0.3;
+                // Make dead characters completely invisible
+                renderObj.container.alpha = 0;
 
                 // Detect death transition (just died)
                 if (!renderObj.lastDeadState) {
                     this.spawnDeathParticles(renderObj.position);
                 }
+            } else {
+                // Ensure alive characters are fully visible
+                renderObj.container.alpha = 1;
             }
             renderObj.lastDeadState = playerData.dead;
         }
