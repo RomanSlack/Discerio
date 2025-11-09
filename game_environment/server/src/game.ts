@@ -292,10 +292,11 @@ export class Game {
         const color = this.getUniqueColor();
         const agent = new AIAgent(this.nextAIAgentId++, agentId, displayName, spawnPoint, color);
 
-        // Give fists and starter pistol
+        // Give fists and starter pistol with more ammo
         agent.addWeapon("fists");
         agent.addWeapon("pistol");
-        agent.addAmmo("universal", 5); // 66% less than 15 = 5 rounds
+        agent.addAmmo("universal", 60); // Give 60 rounds (4 pistol magazines)
+        agent.activeWeaponIndex = 1; // Start with pistol active, not fists
 
         this.aiAgents.set(agentId, agent);
         this.grid.addObject(agent);

@@ -177,19 +177,26 @@ export class AgentBridge {
             // Calculate distance to target
             const distance = Geometry.distance(agent.position, targetPosition);
 
-            // Get current weapon and ammo
+            // Get current weapon and ammo for both slots
             const activeWeapon = agent.weapons[agent.activeWeaponIndex];
             const hasAmmo = activeWeapon && activeWeapon.ammo > 0;
+            const otherWeapon = agent.weapons[agent.activeWeaponIndex === 0 ? 1 : 0];
+            const otherHasAmmo = otherWeapon && otherWeapon.ammo > 0;
 
-            // Auto-switch to fists if:
-            // 1. Out of ammo with current weapon
-            // 2. Very close to target (melee range < 15 units)
+            // Smart weapon switching logic:
+            // 1. If far away (>25 units) and have gun with ammo, switch TO gun
+            // 2. If close (<15 units) OR out of gun ammo, switch TO fists
             const shouldUseFists = !hasAmmo || distance < 15;
+            const shouldUseGun = distance > 25 && otherHasAmmo && !otherWeapon?.definition.isMelee;
 
             if (shouldUseFists && agent.activeWeaponIndex !== 0) {
                 // Switch to fists (slot 0)
                 input.actions.switchWeapon = true;
                 console.log(`[AgentBridge] Agent ${agent.username} auto-switching to fists (distance: ${distance.toFixed(1)}, hasAmmo: ${hasAmmo})`);
+            } else if (shouldUseGun && agent.activeWeaponIndex === 0) {
+                // Switch to gun (slot 1)
+                input.actions.switchWeapon = true;
+                console.log(`[AgentBridge] Agent ${agent.username} auto-switching to gun (distance: ${distance.toFixed(1)}, gun: ${otherWeapon?.definition.idString})`);
             }
 
             // Check for attack deadlock (same target for too long without progress)
