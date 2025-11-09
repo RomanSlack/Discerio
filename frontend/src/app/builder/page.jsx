@@ -56,6 +56,7 @@ const BLOCK_CATEGORIES = {
       { id: 'move', label: 'Move', tool_type: 'move', parameters: { x: 'number', y: 'number' } },
       { id: 'attack', label: 'Attack', tool_type: 'attack', parameters: { target_player_id: 'string' } },
       { id: 'collect', label: 'Collect', tool_type: 'collect', parameters: {} },
+      { id: 'speak', label: 'Speak', tool_type: 'speak', parameters: { text: 'string' } },
       { id: 'plan', label: 'Plan', tool_type: 'plan', parameters: { plan: 'string' } },
       { id: 'search', label: 'Search Web', tool_type: 'search', parameters: { query: 'string' } },
     ]

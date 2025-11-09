@@ -527,7 +527,8 @@ export class AIAgent extends GameObject {
                 this.hitbox.position = this.position;
                 game.grid.updateObject(this);
             } else {
-                // Collision detected during smooth movement - cancel movement without updating grid
+                // Collision detected during smooth movement - stop at current position
+                // Clear movement target so it completes on next tick
                 this.moveTarget = null;
                 this.moveStartPos = null;
             }

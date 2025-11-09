@@ -13,6 +13,7 @@ export class Obstacle extends GameObject {
     maxHealth: number;
     destroyed: boolean = false;
     open: boolean = false; // For interactive obstacles like gates
+    lastSpeechTimestamp: number = 0; // Track last time someone spoke near this obstacle
 
     constructor(id: number, type: string, position: Vector, rotation: number = 0, scale: number = 1) {
         super(id, position);
@@ -74,6 +75,31 @@ export class Obstacle extends GameObject {
             this.open = !this.open;
             console.log(`[Obstacle] Gate ${this.id} is now ${this.open ? 'OPEN' : 'CLOSED'}`);
         }
+    }
+
+    /**
+     * Check if spoken text is the correct password for this gate
+     * Password: "zohran mamdani" (case-insensitive)
+     */
+    checkPassword(text: string): boolean {
+        if (this.definition.idString !== 'gate') return false;
+
+        const normalizedText = text.toLowerCase().trim();
+        const password = "zohran mamdani";
+
+        return normalizedText.includes(password);
+    }
+
+    /**
+     * Open gate if password is correct
+     */
+    unlockWithPassword(text: string): boolean {
+        if (this.checkPassword(text) && !this.open) {
+            this.open = true;
+            console.log(`[Obstacle] Gate ${this.id} UNLOCKED with correct password!`);
+            return true;
+        }
+        return false;
     }
 
     isPassable(): boolean {

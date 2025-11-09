@@ -17,17 +17,20 @@ const LESSON_CONFIGS = {
     showBuilder: true,
     allowedBlocks: ['action', 'agent', 'tool'],
     allowedActionBlocks: ['onStart'], // Only On Start
-    allowedToolBlocks: ['move'], // Only Move
+    allowedToolBlocks: ['move', 'speak', 'collect', 'search'], // Move, Speak, Collect, and Search for Zone 2 challenge
     showAgentBlock: true,
     showToolBlock: true,
     showConnections: true,
-    lessonBlurb: 'Agentic AI refers to AI systems that can accomplish goals with limited supervision. Unlike traditional AI that responds to prompts, agentic AI can autonomously plan, execute actions, and adapt to achieve objectives. These agents can perceive their environment, reason about situations, make decisions, and take actions—all while learning and improving over time.',
+    preferredZone: 'zone2',
+    zone2LeftOnly: true,
+    lessonBlurb: 'Agentic AI refers to AI systems that can accomplish goals with limited supervision. In this challenge, your agent spawns in Zone 2 and must navigate to the gate, speak the password "zohran mamdani" to unlock it, then reach the crown on the other side!',
     lessonGuidelines: [
       { text: 'Enter an Agent ID in the sidebar (e.g., "my_agent") - this gives your agent a name' },
       { text: 'Drag an', block: 'onStart', textAfter: 'block onto the canvas - this is where your agent begins' },
       { text: 'Connect it to an', block: 'agent', textAfter: 'block - this lets your agent think and make choices' },
-      { text: 'Connect the agent to a', block: 'move', textAfter: 'block - this tells your agent what action to take' },
-      { text: 'Click "Deploy Agent" to test your agent in the game preview' },
+      { text: 'Connect the agent to', block: 'move', textAfter: 'and', block: 'speak', textAfter: 'blocks' },
+      { text: 'Configure your agent to navigate to the gate and speak "zohran mamdani"' },
+      { text: 'Once the gate opens, move through it and reach the crown to complete the challenge!' },
     ],
   },
   2: {
@@ -934,7 +937,9 @@ const BLOCK_CATEGORIES = {
       { id: 'move', label: 'Move', tool_type: 'move', parameters: { x: 'number', y: 'number' } },
       { id: 'attack', label: 'Attack', tool_type: 'attack', parameters: { target_player_id: 'string' } },
       { id: 'collect', label: 'Collect', tool_type: 'collect', parameters: {} },
+      { id: 'speak', label: 'Speak', tool_type: 'speak', parameters: { text: 'string' } },
       { id: 'plan', label: 'Plan', tool_type: 'plan', parameters: { plan: 'string' } },
+      { id: 'search', label: 'Search Web', tool_type: 'search', parameters: { query: 'string' } },
     ]
   }
 };
@@ -1753,8 +1758,13 @@ function LessonBuilder({ lesson, config, isStarred, onToggleStar }) {
         blocks: backendBlocks,
       };
 
-      // For lesson 1, register agents in zone 2 (left side only, before the gate)
-      if (lesson.id === 1) {
+      // Register agents in the appropriate zone based on lesson config
+      if (config.preferredZone) {
+        payload.register_in_game = true;
+        payload.preferred_zone = config.preferredZone;
+        payload.zone2_left_only = config.zone2LeftOnly || false;
+      } else if (lesson.id === 1) {
+        // Default: lesson 1 uses zone 2
         payload.register_in_game = true;
         payload.preferred_zone = "zone2";
         payload.zone2_left_only = true;
@@ -1772,7 +1782,11 @@ function LessonBuilder({ lesson, config, isStarred, onToggleStar }) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || 'Failed to deploy agent');
+        console.error('Deployment failed:', error);
+        const errorMsg = typeof error.detail === 'string'
+          ? error.detail
+          : JSON.stringify(error.detail || error);
+        throw new Error(errorMsg);
       }
 
       const result = await response.json();

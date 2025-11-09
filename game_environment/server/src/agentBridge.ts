@@ -16,6 +16,7 @@ export interface BackendAction {
         plan?: string;
         query?: string;
         weapon_slot?: number;
+        text?: string;
     };
 }
 
@@ -98,6 +99,9 @@ export class AgentBridge {
                 break;
             case "switch_weapon":
                 this.applySwitchWeaponCommand(input, action, agent);
+                break;
+            case "speak":
+                this.applySpeakCommand(input, action, agent);
                 break;
             case "plan":
                 // Plan doesn't directly affect input, just store it
@@ -236,6 +240,32 @@ export class AgentBridge {
     }
 
     /**
+     * Apply speak command - agent speaks text, checks for nearby gates to unlock
+     */
+    private applySpeakCommand(input: InputPacket, action: BackendAction, agent: AIAgent): void {
+        const text = action.parameters.text || "";
+        console.log(`[AgentBridge] Agent ${agent.username} speaks: "${text}"`);
+
+        // Check for nearby gates within speaking range (30 units)
+        const speakRange = 30;
+        const nearbyObstacles = this.game.obstacles.filter(obstacle => {
+            if (obstacle.destroyed || obstacle.dead) return false;
+            const distance = Vec.distance(agent.position, obstacle.position);
+            return distance <= speakRange;
+        });
+
+        // Try to unlock any nearby gates with the spoken text
+        for (const obstacle of nearbyObstacles) {
+            if (obstacle.definition.idString === 'gate') {
+                const unlocked = obstacle.unlockWithPassword(text);
+                if (unlocked) {
+                    console.log(`[AgentBridge] Agent ${agent.username} unlocked gate ${obstacle.id}!`);
+                }
+            }
+        }
+    }
+
+    /**
      * Get game state for agent in backend-compatible format
      */
     getGameStateForAgent(agent: AIAgent): BackendGameState {
@@ -322,7 +352,7 @@ export class AgentBridge {
             const distSquared = Geometry.distanceSquared(agent.position, obstacle.position);
             if (distSquared <= nearbyRadiusSquared) {
                 nearbyObstacles.push({
-                    type: obstacle.type,
+                    type: obstacle.definition.idString,
                     position: { x: obstacle.position.x, y: obstacle.position.y },
                     distance: Math.sqrt(distSquared),
                     health: obstacle.health

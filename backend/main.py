@@ -207,7 +207,7 @@ def create_llm_provider() -> LLMProvider:
 class ToolConnection(BaseModel):
     """Connection from an Agent block to a Tool block"""
     tool_id: str = Field(..., description="ID of the tool block to connect to")
-    tool_name: Literal["move", "attack", "collect", "plan", "search", "switch_weapon"] = Field(
+    tool_name: Literal["move", "attack", "collect", "plan", "search", "switch_weapon", "speak"] = Field(
         ..., description="Name of the tool (must match the tool block's tool_type)"
     )
 
@@ -246,7 +246,7 @@ class ToolBlock(BaseModel):
     """Tool block - executes a game action"""
     id: str = Field(..., description="Unique identifier for this block")
     type: Literal["tool"] = "tool"
-    tool_type: Literal["move", "attack", "collect", "plan", "search", "switch_weapon"] = Field(
+    tool_type: Literal["move", "attack", "collect", "plan", "search", "switch_weapon", "speak"] = Field(
         ..., description="Type of tool action"
     )
     parameters: Dict[str, str] = Field(
@@ -289,7 +289,7 @@ class AddAgentRequest(BaseModel):
     blocks: List[Block] = Field(..., description="List of all blocks in the program")
     register_in_game: bool = Field(False, description="Whether to register agent in game immediately")
     username: Optional[str] = Field(None, description="Display name for the agent in game")
-    preferred_zone: Optional[str] = Field(None, description="Preferred zone (zone1 or zone2)")
+    preferred_zone: Optional[Literal["zone1", "zone2"]] = Field(None, description="Preferred zone (zone1 or zone2)")
     zone2_left_only: bool = Field(False, description="If zone2, spawn only on left side of gate")
 
     @validator("blocks")
@@ -355,10 +355,10 @@ class NextStepRequest(BaseModel):
 
 class ToolAction(BaseModel):
     """Response model for a tool action"""
-    tool_type: Literal["move", "attack", "collect", "plan", "search", "switch_weapon"]
+    tool_type: Literal["move", "attack", "collect", "plan", "search", "switch_weapon", "speak"]
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Parameters for the tool (e.g., direction for move, target for attack)"
+        description="Parameters for the tool (e.g., direction for move, target for attack, text for speak)"
     )
 
 
@@ -585,11 +585,28 @@ async def execute_agent_block(
     nearby_obstacles = game_state.nearby_obstacles if hasattr(game_state, 'nearby_obstacles') and game_state.nearby_obstacles else []
     if nearby_obstacles:
         destructible = [o for o in nearby_obstacles if o.get('type') in ['tree', 'rock', 'crate']]
+        gates = [o for o in nearby_obstacles if o.get('type') == 'gate']
+        crowns = [o for o in nearby_obstacles if o.get('type') == 'crown']
+
         if destructible:
             obstacle_context = "\n*** NEARBY OBSTACLES (can block shots!) ***\n"
             for obs in destructible[:5]:
                 obstacle_context += f"- {obs.get('type')} at distance {obs.get('distance', 0):.1f} (health: {obs.get('health', 0)})\n"
             obstacle_context += "TIP: Obstacles can block your bullets! If stuck, shoot them to destroy or move around.\n"
+
+        if gates:
+            obstacle_context += "\n*** GATES (special interactive obstacles) ***\n"
+            for gate in gates:
+                pos = gate.get('position', {})
+                obstacle_context += f"- gate at position (x={pos.get('x', 0):.1f}, y={pos.get('y', 0):.1f}), distance {gate.get('distance', 0):.1f}\n"
+            obstacle_context += "TIP: To open a gate, move near it (within 30 units) and use the 'speak' tool with password 'zohran mamdani'!\n"
+
+        if crowns:
+            obstacle_context += "\n*** CROWN (goal object!) ***\n"
+            for crown in crowns:
+                pos = crown.get('position', {})
+                obstacle_context += f"- crown at position (x={pos.get('x', 0):.1f}, y={pos.get('y', 0):.1f}), distance {crown.get('distance', 0):.1f} units\n"
+            obstacle_context += "TIP: Reach the crown to complete your objective!\n"
 
     # Build attack-specific context if attack tool is available
     attack_context = ""
@@ -616,10 +633,14 @@ async def execute_agent_block(
         f"IMPORTANT RULES:\n"
         f"MOVEMENT:\n"
         f"- The move tool uses RELATIVE coordinates (how much to move, not where to move to)\n"
-        f"- The map bounds are x: 8-504, y: 8-504 (Zone 1 main arena)\n"
-        f"- Keep movements SMALL and gradual (recommended: -20 to +20 per move)\n"
-        f"- Y-axis: NEGATIVE y moves UP (toward y=8), POSITIVE y moves DOWN (toward y=504)\n"
-        f"- X-axis: NEGATIVE x moves LEFT (toward x=8), POSITIVE x moves RIGHT (toward x=504)\n"
+        f"- To navigate to a target: calculate offset = (target_x - current_x, target_y - current_y)\n"
+        f"- Example: You're at (660, 200), gate is at (728, 128)\n"
+        f"  - Calculate: x_offset = 728 - 660 = 68 (move RIGHT)\n"
+        f"  - Calculate: y_offset = 128 - 200 = -72 (move UP)\n"
+        f"  - Use move with x=68, y=-72 to head toward gate\n"
+        f"- Keep movements SMALL and gradual (recommended: -30 to +30 per move)\n"
+        f"- Y-axis: NEGATIVE y moves UP (toward smaller y), POSITIVE y moves DOWN (toward larger y)\n"
+        f"- X-axis: NEGATIVE x moves LEFT (toward smaller x), POSITIVE x moves RIGHT (toward larger x)\n"
         f"ATTACK & AMMO MANAGEMENT:\n"
         f"- Attack tool will auto-aim at the target and shoot your ACTIVE weapon\n"
         f"- NO COOLDOWN on guns - you can attack every game tick if you have ammo\n"
@@ -649,7 +670,8 @@ async def execute_agent_block(
         f"- Move: {{\"reasoning\": \"Moving toward ammo\", \"action\": \"move\", \"parameters\": {{\"x\": 5, \"y\": -10}}}}\n"
         f"- Attack: {{\"reasoning\": \"Shooting enemy\", \"action\": \"attack\", \"parameters\": {{\"target_player_id\": \"3\"}}}}\n"
         f"- Collect: {{\"reasoning\": \"Picking up ammo\", \"action\": \"collect\", \"parameters\": {{}}}}\n"
-        f"- Switch weapon: {{\"reasoning\": \"Switching to fists since pistol is empty\", \"action\": \"switch_weapon\", \"parameters\": {{}}}}"
+        f"- Switch weapon: {{\"reasoning\": \"Switching to fists since pistol is empty\", \"action\": \"switch_weapon\", \"parameters\": {{}}}}\n"
+        f"- Speak: {{\"reasoning\": \"Trying to unlock the gate\", \"action\": \"speak\", \"parameters\": {{\"text\": \"zohran mamdani\"}}}}"
     )
 
     full_input = agent_block.system_prompt + "\n\n" + user_input

@@ -79,5 +79,16 @@ export const Obstacles: Record<string, ObstacleDefinition> = {
             height: 32    // Gate height (can fit players through when open)
         },
         indestructible: true
+    },
+    crown: {
+        idString: "crown",
+        name: "Crown",
+        health: 1000,
+        scale: 1.0,
+        hitbox: {
+            type: 'circle',
+            radius: 5
+        },
+        indestructible: true
     }
 };
