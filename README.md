@@ -17,6 +17,13 @@
 
 Discer.io is an interactive platform that teaches agentic AI concepts through a multiplayer battle royale game. Build AI agents using a visual block-based programming interface, deploy them into a live combat arena, and watch them make real-time decisions using large language models. Created for HackPrinceton Fall 2025.
 
+
+### Project Links
+
+- [Demo Website](https://www.discerio.tech/)
+- [Devpost Project Page](https://devpost.com/software/discer-io)
+
+
 ### Visual Programming Interface
 
 A React-based drag-and-drop environment where users design agent behavior without writing code. Agents are composed of:
